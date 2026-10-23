@@ -29,9 +29,13 @@ from spacy.tokens import Doc, Span
 SPACY_MODEL_NAME: Final[str] = "es_core_news_lg"
 SPACY_FALLBACK_MODELS: Final[tuple[str, ...]] = ("es_core_news_lg", "es_core_news_md", "es_core_news_sm")
 
-# Expresión regular obligatoria para el Módulo B (Reframing Asindético)
+# Expresión regular para el Módulo B: Reframing Asindético y Adversativo («No es X, es Y» / «No [era/es] [solo] X, sino Y»)
 PATRON_REFRAMING: Final[Pattern[str]] = re.compile(
-    r"\bno\s+(?:es|se\s+trata\s+de)\s+[^,;.:]+[,;]\s+(?:sino\s+que\s+)?(?:es|se\s+trata\s+de)\b",
+    r"\b(?:ya\s+)?no\s+(?:"
+    r"(?:solo\s+|meramente\s+|únicamente\s+|simplemente\s+)?(?:es|era|son|eran|fue|fueron|se\s+trata(?:ba)?\s+de|consiste\s+en|consistía\s+en)\s+[^,;.:\n]+[,;]\s+(?:es|era|son|eran|fue|fueron|se\s+trata(?:ba)?\s+de|consiste\s+en|consistía\s+en)(?:\s+[^,;.:\n]+)?"
+    r"|"
+    r"[^,;.:\n]{2,140}[,;]\s+sino(?:\s+que|\s+de|\s+también|\s+más\s+bien)?\s+[^,;.:\n]+"
+    r")",
     re.IGNORECASE,
 )
 

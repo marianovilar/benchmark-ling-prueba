@@ -147,7 +147,7 @@ def render_header_and_prompts() -> None:
         "Puedes ejecutar **ambas pruebas al mismo tiempo o activar solo una** según lo que quieras mostrar en clase."
     )
 
-    col_guide, col_prompts, col_links = st.columns(3)
+    col_guide, col_links = st.columns(2)
 
     with col_guide:
         with st.expander("📖 ¿Qué evalúa cada prueba?", expanded=False):
@@ -160,19 +160,10 @@ def render_header_and_prompts() -> None:
                    - `Q3`: Régimen preposicional y queísmo/dequeísmo (*clave: C*)
                    - `Q4`: Gerundio de posterioridad temporal (*clave: B*)
                 2. **✍️ Prueba 2 — Auditoría Estilística en Prosa (Reframing + Dos Puntos):**
-                   - **Tic 1 — Reframing asindético (*«No es X, es Y»*):** Fórmulas adversativas yuxtapuestas por coma o punto y coma.
+                   - **Tic 1 — Reframing asindético y adversativo (*«No es X, es Y»* / *«No era solo X, sino Y»*):** Fórmulas binarias donde se niega un término para reformularlo tras coma o punto y coma (con o sin *sino*).
                    - **Tic 2 — Dos puntos oracionales (`[Oración] : [Oración con verbo]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado (`VERB`/`AUX`), descartando listas y aposiciones nominales.
                 """
             )
-
-    with col_prompts:
-        with st.expander("📋 Prompts listos para copiar (Test + Ensayo)", expanded=False):
-            st.markdown("**1. Prompt para el Test Metalingüístico (Q1–Q4):**")
-            st.code(get_metalinguistic_prompt_text(), language="markdown")
-            st.markdown("**2. Prompts para el Texto Ensayístico (Estilometría):**")
-            for item in PROMPTS_SUGERIDOS:
-                st.caption(item["titulo"])
-                st.code(item["prompt"], language="markdown")
 
     with col_links:
         with st.expander("🌐 Modelos gratuitos y alternativos para probar en clase", expanded=False):
@@ -189,6 +180,21 @@ def render_header_and_prompts() -> None:
                 * 🐋 **[DeepSeek Chat](https://chat.deepseek.com/)** — Modelo gratuito alternativo útil para comparar tics retóricos en español.
                 """
             )
+
+    # Tres ventanas separadas para cada prompt listo para copiar
+    p_col1, p_col2, p_col3 = st.columns(3)
+    with p_col1:
+        with st.expander("📋 Prompt 1: Test Metalingüístico (Q1–Q4)", expanded=False):
+            st.caption("Haz clic en el icono de copiar (arriba a la derecha del recuadro):")
+            st.code(get_metalinguistic_prompt_text(), language="markdown")
+    with p_col2:
+        with st.expander("📋 Prompt 2: Ensayo sobre Filología (Opción 1)", expanded=False):
+            st.caption(PROMPTS_SUGERIDOS[0]["titulo"])
+            st.code(PROMPTS_SUGERIDOS[0]["prompt"], language="markdown")
+    with p_col3:
+        with st.expander("📋 Prompt 3: Ensayo sobre IA y Estilo (Opción 2)", expanded=False):
+            st.caption(PROMPTS_SUGERIDOS[1]["titulo"])
+            st.code(PROMPTS_SUGERIDOS[1]["prompt"], language="markdown")
 
 
 def render_metalinguistic_comparison(res_a: ModelAuditResult, res_b: ModelAuditResult) -> None:
