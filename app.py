@@ -233,7 +233,7 @@ def render_about_tab() -> None:
     st.subheader("ℹ️ Cómo funciona este sitio")
     st.markdown(
         """
-        Este sitio fue armado por **Mariano Vilar** con propósitos pedagógicos utilizando la **IA de Google**.
+        Este sitio fue armado por **Mariano Vilar** con propósitos pedagógicos utilizando **Google Gemini**.
         Su objetivo es ofrecer un entorno experimental transparente para analizar y comparar el desempeño lingüístico,
         gramatical y estilístico de distintos modelos de lenguaje (LLMs) en español.
 
