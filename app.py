@@ -178,21 +178,21 @@ def parse_custom_ground_truth_errors(raw_gt_lines: str) -> tuple[PlantedError, .
 
 def init_session_state() -> None:
     if "nombre_a" not in st.session_state:
-        st.session_state["nombre_a"] = "Modelo A (ej. GPT-4o)"
+        st.session_state["nombre_a"] = ""
     if "nombre_b" not in st.session_state:
-        st.session_state["nombre_b"] = "Modelo B (ej. modelo pequeño / gratis)"
+        st.session_state["nombre_b"] = ""
     if "meta_input_a" not in st.session_state:
-        st.session_state["meta_input_a"] = META_DEMO_MODELO_A
+        st.session_state["meta_input_a"] = ""
     if "meta_input_b" not in st.session_state:
-        st.session_state["meta_input_b"] = META_DEMO_MODELO_B
+        st.session_state["meta_input_b"] = ""
     if "texto_a" not in st.session_state:
-        st.session_state["texto_a"] = TEXTO_DEMO_MODELO_A
+        st.session_state["texto_a"] = ""
     if "texto_b" not in st.session_state:
-        st.session_state["texto_b"] = TEXTO_DEMO_MODELO_B
+        st.session_state["texto_b"] = ""
     if "error_input_a" not in st.session_state:
-        st.session_state["error_input_a"] = DEMO_RESPUESTA_ERRORES_MODELO_A
+        st.session_state["error_input_a"] = ""
     if "error_input_b" not in st.session_state:
-        st.session_state["error_input_b"] = DEMO_RESPUESTA_ERRORES_MODELO_B
+        st.session_state["error_input_b"] = ""
     if "run_meta" not in st.session_state:
         st.session_state["run_meta"] = True
     if "run_style" not in st.session_state:
@@ -202,6 +202,8 @@ def init_session_state() -> None:
 
 
 def load_demo_texts() -> None:
+    st.session_state["nombre_a"] = "Modelo A (ej. GPT-4o)"
+    st.session_state["nombre_b"] = "Modelo B (ej. modelo pequeño / gratis)"
     st.session_state["meta_input_a"] = META_DEMO_MODELO_A
     st.session_state["meta_input_b"] = META_DEMO_MODELO_B
     st.session_state["texto_a"] = TEXTO_DEMO_MODELO_A
@@ -211,6 +213,8 @@ def load_demo_texts() -> None:
 
 
 def clear_texts() -> None:
+    st.session_state["nombre_a"] = ""
+    st.session_state["nombre_b"] = ""
     st.session_state["meta_input_a"] = ""
     st.session_state["meta_input_b"] = ""
     st.session_state["texto_a"] = ""
@@ -594,7 +598,11 @@ def main() -> None:
     col_a, col_b = st.columns(2)
 
     with col_a:
-        nombre_a = st.text_input("Nombre del modelo 1", key="nombre_a")
+        nombre_a = st.text_input(
+            "Nombre del modelo 1",
+            key="nombre_a",
+            placeholder="Ej.: GPT-4o, Gemini, Llama 3...",
+        )
         if run_meta:
             meta_input_a = st.text_area(
                 "🧪 Respuestas del test metalingüístico (Q1–Q4) — Modelo 1:",
@@ -630,7 +638,11 @@ def main() -> None:
             error_input_a = ""
 
     with col_b:
-        nombre_b = st.text_input("Nombre del modelo 2", key="nombre_b")
+        nombre_b = st.text_input(
+            "Nombre del modelo 2",
+            key="nombre_b",
+            placeholder="Ej.: Claude, Mistral, Qwen, OLMo...",
+        )
         if run_meta:
             meta_input_b = st.text_area(
                 "🧪 Respuestas del test metalingüístico (Q1–Q4) — Modelo 2:",
@@ -673,6 +685,17 @@ def main() -> None:
         type="primary",
         use_container_width=True,
     )
+
+    has_any_input = any(
+        val.strip()
+        for val in (meta_input_a, meta_input_b, texto_a, texto_b, error_input_a, error_input_b)
+    )
+    if not has_any_input:
+        st.info(
+            "💡 Pega las respuestas de los modelos en las cajas de arriba y presiona "
+            "**«▶️ Ejecutar evaluación y comparar modelos»**, o haz clic en **«✨ Ejemplo»** para cargar una demostración."
+        )
+        return
 
     nlp: Language | None = None
     model_loaded = SPACY_MODEL_NAME
