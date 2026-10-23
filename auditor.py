@@ -231,14 +231,14 @@ class ModelAuditResult:
         """Convierte el resultado al esquema dinámico según las pruebas activas."""
         row: dict[str, Any] = {"Modelo": self.modelo}
         if include_meta:
-            row["Puntaje Meta (0-4)"] = self.meta.puntaje_absoluto
-            row["Precisión Meta (%)"] = round(self.meta.precision_porcentaje, 2)
+            row["Puntaje meta (0-4)"] = self.meta.puntaje_absoluto
+            row["Precisión meta (%)"] = round(self.meta.precision_porcentaje, 2)
         if include_style:
-            row["Palabras Totales"] = self.palabras_totales
+            row["Palabras totales"] = self.palabras_totales
             row["Reframing (N)"] = self.total_reframing
-            row["Densidad Reframing / 500w"] = round(self.densidad_reframing_500w, 2)
-            row["Dos Puntos Oracionales (N)"] = self.total_dos_puntos
-            row["Densidad Dos Puntos / 500w"] = round(self.densidad_dos_puntos_500w, 2)
+            row["Densidad reframing / 500w"] = round(self.densidad_reframing_500w, 2)
+            row["Dos puntos oracionales (N)"] = self.total_dos_puntos
+            row["Densidad dos puntos / 500w"] = round(self.densidad_dos_puntos_500w, 2)
         return row
 
 

@@ -2,8 +2,8 @@
 app.py - Interfaz interactiva en Streamlit para comparar 2 modelos en vivo (ideal para clases y GitHub).
 
 Permite activar o desactivar libremente cualquiera de las dos pruebas:
-- Prueba 1: Evaluación Metalingüística Objetiva (Multiple Choice Q1-Q4 contra Ground Truth).
-- Prueba 2: Auditoría Estilística en Prosa (Reframing Asindético + Dos Puntos Oracionales con spaCy).
+- Prueba 1: evaluación metalingüística objetiva (opción múltiple Q1-Q4 contra ground truth).
+- Prueba 2: auditoría estilística en prosa (reframing asindético + dos puntos oracionales con spaCy).
 
 Ejecución:
     streamlit run app.py
@@ -38,15 +38,32 @@ from auditor import (
 # ============================================================================
 
 st.set_page_config(
-    page_title="Benchmark Estilometría y Gramática LLM",
+    page_title="Benchmark en vivo: evaluación metalingüística y estilometría de LLMs",
     page_icon="📐",
     layout="wide",
+)
+
+# Forzar salto de línea automático en bloques de prompts para evitar desplazamiento horizontal
+st.markdown(
+    """
+    <style>
+    div[data-testid="stCodeBlock"] pre,
+    div[data-testid="stCodeBlock"] code,
+    div[data-testid="stCode"] pre,
+    div[data-testid="stCode"] code {
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+        overflow-x: hidden !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
 @st.cache_resource(show_spinner="Cargando modelo lingüístico de spaCy...")
 def get_cached_nlp() -> tuple[Language, str]:
-    """Carga y guarda en caché el modelo de spaCy solo cuando la Prueba 2 (Estilometría) está activa."""
+    """Carga y guarda en caché el modelo de spaCy solo cuando la prueba de estilometría está activa."""
     return load_spacy_model(SPACY_MODEL_NAME)
 
 
@@ -56,7 +73,7 @@ def get_cached_nlp() -> tuple[Language, str]:
 
 
 def highlight_reframing_html(sentence: str, fragment: str) -> str:
-    """Resalta en amarillo el patrón de reframing asindético dentro de la oración."""
+    """Resalta en amarillo el patrón de reframing dentro de la oración."""
     escaped_sentence = html.escape(sentence)
     escaped_fragment = html.escape(fragment)
     if not escaped_fragment:
@@ -141,7 +158,7 @@ def clear_texts() -> None:
 
 
 def render_header_and_prompts() -> None:
-    st.title("📐 Benchmark en Vivo: Evaluación Metalingüística y Estilometría de LLMs")
+    st.title("📐 Benchmark en vivo: evaluación metalingüística y estilometría de LLMs")
     st.markdown(
         "Compara dos modelos de lenguaje en español pegando sus respuestas lado a lado. "
         "Puedes ejecutar **ambas pruebas al mismo tiempo o activar solo una** según lo que quieras mostrar en clase."
@@ -153,13 +170,13 @@ def render_header_and_prompts() -> None:
         with st.expander("📖 ¿Qué evalúa cada prueba?", expanded=False):
             st.markdown(
                 """
-                1. **🧪 Prueba 1 — Test Metalingüístico (Multiple Choice Q1–Q4):**
+                1. **🧪 Prueba 1 — Test metalingüístico (opción múltiple Q1–Q4):**
                    Evalúa precisión gramatical normativa (0 a 4 puntos) en:
                    - `Q1`: Concordancia con colectivos partitivos (*clave: B*)
                    - `Q2`: Impersonal con *se* y acusativo animado (*clave: C*)
                    - `Q3`: Régimen preposicional y queísmo/dequeísmo (*clave: C*)
                    - `Q4`: Gerundio de posterioridad temporal (*clave: B*)
-                2. **✍️ Prueba 2 — Auditoría Estilística en Prosa (Reframing + Dos Puntos):**
+                2. **✍️ Prueba 2 — Auditoría estilística en prosa (reframing + dos puntos):**
                    - **Tic 1 — Reframing asindético y adversativo (*«No es X, es Y»* / *«No era solo X, sino Y»*):** Fórmulas binarias donde se niega un término para reformularlo tras coma o punto y coma (con o sin *sino*).
                    - **Tic 2 — Dos puntos oracionales (`[Oración] : [Oración con verbo]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado (`VERB`/`AUX`), descartando listas y aposiciones nominales.
                 """
@@ -181,25 +198,25 @@ def render_header_and_prompts() -> None:
                 """
             )
 
-    # Tres ventanas separadas para cada prompt listo para copiar
-    p_col1, p_col2, p_col3 = st.columns(3)
-    with p_col1:
-        with st.expander("📋 Prompt 1: Test Metalingüístico (Q1–Q4)", expanded=False):
-            st.caption("Haz clic en el icono de copiar (arriba a la derecha del recuadro):")
-            st.code(get_metalinguistic_prompt_text(), language="markdown")
-    with p_col2:
-        with st.expander("📋 Prompt 2: Ensayo sobre Filología (Opción 1)", expanded=False):
-            st.caption(PROMPTS_SUGERIDOS[0]["titulo"])
-            st.code(PROMPTS_SUGERIDOS[0]["prompt"], language="markdown")
-    with p_col3:
-        with st.expander("📋 Prompt 3: Ensayo sobre IA y Estilo (Opción 2)", expanded=False):
-            st.caption(PROMPTS_SUGERIDOS[1]["titulo"])
-            st.code(PROMPTS_SUGERIDOS[1]["prompt"], language="markdown")
+    # Ventanas separadas de ancho completo para visualizar cada prompt entero sin scroll horizontal
+    with st.expander("📋 Prompt 1: test metalingüístico (Q1–Q4)", expanded=False):
+        st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
+        st.code(get_metalinguistic_prompt_text(), language=None, wrap_lines=True)
+
+    col_p2, col_p3 = st.columns(2)
+    with col_p2:
+        with st.expander("📋 Prompt 2: ensayo sobre filología (opción 1)", expanded=False):
+            st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
+            st.code(PROMPTS_SUGERIDOS[0]["prompt"], language=None, wrap_lines=True)
+    with col_p3:
+        with st.expander("📋 Prompt 3: ensayo sobre IA y estilo (opción 2)", expanded=False):
+            st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
+            st.code(PROMPTS_SUGERIDOS[1]["prompt"], language=None, wrap_lines=True)
 
 
 def render_metalinguistic_comparison(res_a: ModelAuditResult, res_b: ModelAuditResult) -> None:
-    """Muestra la tabla comparativa pregunta por pregunta del Test Metalingüístico (Q1-Q4)."""
-    st.subheader("🧪 Desglose de la Prueba 1: Test Metalingüístico (Multiple Choice Q1–Q4)")
+    """Muestra la tabla comparativa pregunta por pregunta del test metalingüístico (Q1-Q4)."""
+    st.subheader("🧪 Desglose de la prueba 1: test metalingüístico (opción múltiple Q1–Q4)")
 
     rows = []
     for det_a, det_b in zip(res_a.meta.detalles, res_b.meta.detalles):
@@ -210,9 +227,9 @@ def render_metalinguistic_comparison(res_a: ModelAuditResult, res_b: ModelAuditR
         rows.append(
             {
                 "Ítem": det_a.question_id,
-                "Fenómeno Gramatical": det_a.pregunta,
+                "Fenómeno gramatical": det_a.pregunta,
                 "Enunciado": enunciado,
-                "Clave Oficial": det_a.respuesta_esperada,
+                "Clave oficial": det_a.respuesta_esperada,
                 f"{res_a.modelo}": f"{icon_a} {det_a.respuesta_modelo}",
                 f"{res_b.modelo}": f"{icon_b} {det_b.respuesta_modelo}",
             }
@@ -228,7 +245,7 @@ def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = T
     if show_meta_metric:
         c1, c2, c3, c4 = st.columns(4)
         c1.metric(
-            "Puntaje Meta",
+            "Puntaje meta",
             f"{res.meta.puntaje_absoluto}/4",
             f"{res.meta.precision_porcentaje:.0f}%",
         )
@@ -240,7 +257,7 @@ def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = T
             delta_color="inverse",
         )
         c4.metric(
-            "Dos Puntos Orac.",
+            "Dos puntos orac.",
             f"{res.total_dos_puntos}",
             f"{res.densidad_dos_puntos_500w:.2f} / 500w",
             delta_color="inverse",
@@ -255,15 +272,15 @@ def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = T
             delta_color="inverse",
         )
         c3.metric(
-            "Dos Puntos Orac.",
+            "Dos puntos orac.",
             f"{res.total_dos_puntos}",
             f"{res.densidad_dos_puntos_500w:.2f} / 500w",
             delta_color="inverse",
         )
 
-    st.markdown(f"**🟨 Tic 1 — Reframing Asindético detectado ({res.total_reframing}):**")
+    st.markdown(f"**🟨 Tic 1 — Reframing asindético y adversativo detectado ({res.total_reframing}):**")
     if not res.reframing_matches:
-        st.success("Sin ocurrencias de reframing asindético.")
+        st.success("Sin ocurrencias de reframing.")
     else:
         for idx, match in enumerate(res.reframing_matches, 1):
             html_sent = highlight_reframing_html(match.oracion_contexto, match.fragmento_coincidente)
@@ -274,7 +291,7 @@ def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = T
                 unsafe_allow_html=True,
             )
 
-    st.markdown(f"**🟥 Tic 2 — Dos Puntos Oracionales detectados ({res.total_dos_puntos}):**")
+    st.markdown(f"**🟥 Tic 2 — Dos puntos oracionales detectados ({res.total_dos_puntos}):**")
     if not res.dos_puntos_matches:
         st.success("Sin yuxtaposiciones oracionales con dos puntos.")
     else:
@@ -305,12 +322,12 @@ def main() -> None:
     ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([3, 3, 2, 2])
     with ctrl1:
         run_meta = st.toggle(
-            "🧪 Prueba 1: Test Metalingüístico (Multiple Choice Q1–Q4)",
+            "🧪 Prueba 1: test metalingüístico (opción múltiple Q1–Q4)",
             key="run_meta",
         )
     with ctrl2:
         run_style = st.toggle(
-            "✍️ Prueba 2: Auditoría Estilística (Reframing + Dos Puntos)",
+            "✍️ Prueba 2: auditoría estilística (reframing + dos puntos)",
             key="run_style",
         )
     with ctrl3:
@@ -336,10 +353,10 @@ def main() -> None:
     col_a, col_b = st.columns(2)
 
     with col_a:
-        nombre_a = st.text_input("Nombre del Modelo 1", key="nombre_a")
+        nombre_a = st.text_input("Nombre del modelo 1", key="nombre_a")
         if run_meta:
             meta_input_a = st.text_area(
-                "🧪 Respuestas Multiple Choice Metalingüístico (Q1–Q4) — Modelo 1:",
+                "🧪 Respuestas del test metalingüístico (Q1–Q4) — Modelo 1:",
                 key="meta_input_a",
                 height=100,
                 help=(
@@ -353,19 +370,19 @@ def main() -> None:
 
         if run_style:
             texto_a = st.text_area(
-                "✍️ Texto Ensayístico para Estilometría — Modelo 1:",
+                "✍️ Texto ensayístico para estilometría — Modelo 1:",
                 key="texto_a",
                 height=260,
-                placeholder="Copia y pega aquí el ensayo generado por el Modelo 1...",
+                placeholder="Copia y pega aquí el ensayo generado por el modelo 1...",
             )
         else:
             texto_a = ""
 
     with col_b:
-        nombre_b = st.text_input("Nombre del Modelo 2", key="nombre_b")
+        nombre_b = st.text_input("Nombre del modelo 2", key="nombre_b")
         if run_meta:
             meta_input_b = st.text_area(
-                "🧪 Respuestas Multiple Choice Metalingüístico (Q1–Q4) — Modelo 2:",
+                "🧪 Respuestas del test metalingüístico (Q1–Q4) — Modelo 2:",
                 key="meta_input_b",
                 height=100,
                 help=(
@@ -379,10 +396,10 @@ def main() -> None:
 
         if run_style:
             texto_b = st.text_area(
-                "✍️ Texto Ensayístico para Estilometría — Modelo 2:",
+                "✍️ Texto ensayístico para estilometría — Modelo 2:",
                 key="texto_b",
                 height=260,
-                placeholder="Copia y pega aquí el ensayo generado por el Modelo 2...",
+                placeholder="Copia y pega aquí el ensayo generado por el modelo 2...",
             )
         else:
             texto_b = ""
@@ -391,7 +408,7 @@ def main() -> None:
     # BOTÓN DE EJECUCIÓN Y PANEL DE RESULTADOS
     # ========================================================================
     st.button(
-        "▶️ Ejecutar Evaluación y Comparar Modelos",
+        "▶️ Ejecutar evaluación y comparar modelos",
         type="primary",
         use_container_width=True,
     )
@@ -401,7 +418,7 @@ def main() -> None:
         return
 
     if run_meta and not meta_input_a.strip() and not meta_input_b.strip() and not run_style:
-        st.info("Pega las respuestas del Multiple Choice (Q1–Q4) de al menos un modelo para evaluar.")
+        st.info("Pega las respuestas del test metalingüístico (Q1–Q4) de al menos un modelo para evaluar.")
         return
 
     nlp: Language | None = None
@@ -423,44 +440,44 @@ def main() -> None:
         run_style=run_style,
     )
 
-    # 1. Tabla Resumen General adaptada a las pruebas activas
+    # 1. Tabla resumen general adaptada a las pruebas activas
     st.divider()
-    st.subheader("📊 Tabla Comparativa de Resultados")
+    st.subheader("📊 Tabla comparativa de resultados")
     st.dataframe(
         df_summary,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Puntaje Meta (0-4)": st.column_config.NumberColumn("Puntaje Meta (0-4)", format="%d / 4"),
-            "Precisión Meta (%)": st.column_config.ProgressColumn(
-                "Precisión Meta (%)",
+            "Puntaje meta (0-4)": st.column_config.NumberColumn("Puntaje meta (0-4)", format="%d / 4"),
+            "Precisión meta (%)": st.column_config.ProgressColumn(
+                "Precisión meta (%)",
                 format="%.1f%%",
                 min_value=0,
                 max_value=100,
             ),
-            "Densidad Reframing / 500w": st.column_config.NumberColumn(format="%.2f"),
-            "Densidad Dos Puntos / 500w": st.column_config.NumberColumn(format="%.2f"),
+            "Densidad reframing / 500w": st.column_config.NumberColumn(format="%.2f"),
+            "Densidad dos puntos / 500w": st.column_config.NumberColumn(format="%.2f"),
         },
     )
 
-    # 2. Si la Prueba 1 (Multiple Choice) está activa, mostrar desglose pregunta por pregunta
+    # 2. Si la Prueba 1 (opción múltiple) está activa, mostrar desglose pregunta por pregunta
     if run_meta:
         st.divider()
         render_metalinguistic_comparison(results[0], results[1])
 
-    # 3. Si la Prueba 2 (Estilometría) está activa, mostrar gráfico de barras y visor cualitativo
+    # 3. Si la Prueba 2 (estilometría) está activa, mostrar gráfico de barras y visor cualitativo
     if run_style:
         st.divider()
-        st.subheader("📈 Comparativa de Densidad de Tics Sintácticos (cada 500 palabras)")
+        st.subheader("📈 Comparativa de densidad de tics sintácticos (cada 500 palabras)")
         chart_df = df_summary.set_index("Modelo")[
-            ["Densidad Reframing / 500w", "Densidad Dos Puntos / 500w"]
+            ["Densidad reframing / 500w", "Densidad dos puntos / 500w"]
         ]
         st.bar_chart(chart_df, height=320)
 
         st.divider()
-        st.subheader("🔍 Evidencia Cualitativa Lado a Lado (Oraciones Detectadas)")
+        st.subheader("🔍 Evidencia cualitativa lado a lado (oraciones detectadas)")
         st.caption(
-            "Nota: En amarillo se resalta el patrón de *Reframing Asindético*; en rojo los dos puntos oracionales "
+            "Nota: En amarillo se resalta el patrón de *reframing*; en rojo los dos puntos oracionales "
             "y en verde los verbos conjugados (`VERB`/`AUX`) que validan la segunda proposición."
         )
 
@@ -475,7 +492,7 @@ def main() -> None:
     dl1, dl2 = st.columns(2)
     with dl1:
         st.download_button(
-            "⬇️ Descargar Tabla Comparativa (CSV)",
+            "⬇️ Descargar tabla comparativa (CSV)",
             data=df_summary.to_csv(index=False).encode("utf-8-sig"),
             file_name="metricas_resumen.csv",
             mime="text/csv",
@@ -489,7 +506,7 @@ def main() -> None:
             run_style=run_style,
         )
         st.download_button(
-            "📄 Descargar Log de Auditoría Detallada (TXT)",
+            "📄 Descargar informe detallado (TXT)",
             data=log_str.encode("utf-8"),
             file_name="auditoria_detallada.txt",
             mime="text/plain",
