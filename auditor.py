@@ -1,10 +1,12 @@
 """
-auditor.py - Motor en memoria de evaluación metalingüística y estilometría para LLMs.
+auditor.py - Motor en memoria de evaluación metalingüística, estilometría y detección de errores para LLMs.
 
-Permite activar o desactivar de forma independiente:
-- Prueba 1 (Módulo A): Evaluación Metalingüística Objetiva (Multiple Choice Q1-Q4 contra Ground Truth).
-- Prueba 2 (Módulos B, C y D): Auditoría Estilística Fina (Reframing Asindético y Dos Puntos Oracionales
-  con spaCy, normalizados cada 500 palabras).
+Permite activar o desactivar de forma independiente las pruebas:
+- Prueba 1 (Módulo A): evaluación metalingüística objetiva (opción múltiple Q1-Q4 contra ground truth).
+- Prueba 2 (Módulos B, C y D): auditoría estilística en prosa (reframing asindético/adversativo y
+  dos puntos oracionales con spaCy, normalizados cada 500 palabras).
+- Prueba 3 (Módulo E): detección y corrección de errores de redacción y ortografía (sobre los 3 textos
+  extensos de ~1000 palabras con errores claros y sutiles, o sobre un texto propio subido por el usuario).
 """
 
 from __future__ import annotations
@@ -21,6 +23,8 @@ import pandas as pd
 import spacy
 from spacy.language import Language
 from spacy.tokens import Doc, Span
+
+from textos_errores import PlantedError
 
 # ============================================================================
 # CONSTANTES Y PATRONES PRECOMPILADOS
@@ -190,7 +194,7 @@ class MetaEvaluationResult:
 
 @dataclass(frozen=True)
 class ReframingMatch:
-    """Ocurrencia detectada por el Módulo B (Reframing Asindético)."""
+    """Ocurrencia detectada por el Módulo B (Reframing Asindético/Adversativo)."""
 
     fragmento_coincidente: str
     oracion_contexto: str
@@ -207,6 +211,42 @@ class ColonClauseMatch:
 
 
 @dataclass(frozen=True)
+class ParsedErrorCorrection:
+    """Ítem individual extraído de la respuesta de corrección de un modelo."""
+
+    numero: int
+    error_identificado: str
+    correccion_propuesta: str
+    explicacion: str
+    linea_original: str
+
+
+@dataclass(frozen=True)
+class PlantedErrorMatchDetail:
+    """Resultado de verificación de un error plantado contra la respuesta del modelo."""
+
+    error_plantado: PlantedError
+    detectado: bool
+    evidencia_modelo: str
+
+
+@dataclass(frozen=True)
+class ErrorDetectionResult:
+    """Resultado consolidado del Módulo E (Detección y Corrección de Errores)."""
+
+    items_extraidos: list[ParsedErrorCorrection] = field(default_factory=list)
+    tiene_ground_truth: bool = False
+    total_plantados: int = 0
+    detectados_total: int = 0
+    precision_porcentaje: float = 0.0
+    claros_total: int = 0
+    claros_detectados: int = 0
+    sutiles_total: int = 0
+    sutiles_detectados: int = 0
+    detalles_plantados: list[PlantedErrorMatchDetail] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class ModelAuditResult:
     """Resultado integral de auditoría en memoria para un modelo."""
 
@@ -218,6 +258,7 @@ class ModelAuditResult:
     densidad_reframing_500w: float
     dos_puntos_matches: list[ColonClauseMatch]
     densidad_dos_puntos_500w: float
+    errores_result: ErrorDetectionResult = field(default_factory=ErrorDetectionResult)
 
     @property
     def total_reframing(self) -> int:
@@ -227,7 +268,12 @@ class ModelAuditResult:
     def total_dos_puntos(self) -> int:
         return len(self.dos_puntos_matches)
 
-    def to_summary_dict(self, include_meta: bool = True, include_style: bool = True) -> dict[str, Any]:
+    def to_summary_dict(
+        self,
+        include_meta: bool = True,
+        include_style: bool = True,
+        include_errors: bool = False,
+    ) -> dict[str, Any]:
         """Convierte el resultado al esquema dinámico según las pruebas activas."""
         row: dict[str, Any] = {"Modelo": self.modelo}
         if include_meta:
@@ -239,6 +285,19 @@ class ModelAuditResult:
             row["Densidad reframing / 500w"] = round(self.densidad_reframing_500w, 2)
             row["Dos puntos oracionales (N)"] = self.total_dos_puntos
             row["Densidad dos puntos / 500w"] = round(self.densidad_dos_puntos_500w, 2)
+        if include_errors:
+            if self.errores_result.tiene_ground_truth:
+                row["Errores detectados"] = (
+                    f"{self.errores_result.detectados_total} / {self.errores_result.total_plantados}"
+                )
+                row["Detección errores (%)"] = round(self.errores_result.precision_porcentaje, 1)
+                row["Claros detectados"] = (
+                    f"{self.errores_result.claros_detectados} / {self.errores_result.claros_total}"
+                )
+                row["Sutiles detectados"] = (
+                    f"{self.errores_result.sutiles_detectados} / {self.errores_result.sutiles_total}"
+                )
+            row["Ítems reportados por el modelo"] = len(self.errores_result.items_extraidos)
         return row
 
 
@@ -278,13 +337,7 @@ def load_spacy_model(preferred_model: str = SPACY_MODEL_NAME) -> tuple[Language,
 
 
 def parse_meta_input(raw_input: str | dict[str, str] | None) -> dict[str, str]:
-    """
-    Extrae las respuestas de q1, q2, q3, q4 a partir de:
-    - Un diccionario Python `{"q1": "B", ...}`
-    - Un bloque JSON pegado (incluso dentro de bloques markdown ```json ... ```)
-    - Texto libre pegado como `q1: B, q2: C, q3: C, q4: B` o `1. B / 2. C / 3. C / 4. B`
-    - O una secuencia simple de 4 letras `B, C, C, B`.
-    """
+    """Extrae las respuestas de q1, q2, q3, q4 a partir de JSON o texto libre pegado."""
     if not raw_input:
         return {}
     if isinstance(raw_input, dict):
@@ -294,7 +347,6 @@ def parse_meta_input(raw_input: str | dict[str, str] | None) -> dict[str, str]:
     if not text:
         return {}
 
-    # 1. Intentar extraer un objeto JSON `{...}` si está presente
     json_match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
     if json_match:
         try:
@@ -308,7 +360,6 @@ def parse_meta_input(raw_input: str | dict[str, str] | None) -> dict[str, str]:
         except json.JSONDecodeError:
             pass
 
-    # 2. Buscar patrones explícitos tipo `q1: B`, `Pregunta 1: B`, `1) B`, `1. B`, `1: B`
     extracted: dict[str, str] = {}
     for idx in range(1, 5):
         pattern = re.compile(
@@ -322,7 +373,6 @@ def parse_meta_input(raw_input: str | dict[str, str] | None) -> dict[str, str]:
     if extracted:
         return extracted
 
-    # 3. Fallback: si el usuario pegó simplemente 4 letras separadas por coma/espacio (ej: "B, C, C, B")
     letters = re.findall(r"\b([A-Da-d])\b", text)
     if len(letters) == 4:
         return {f"q{i+1}": letters[i].upper() for i in range(4)}
@@ -334,10 +384,7 @@ def evaluate_metalinguistic_answers(
     raw_or_dict_answers: str | dict[str, str] | None,
     ground_truth: dict[str, dict[str, Any]] = GROUND_TRUTH_META,
 ) -> MetaEvaluationResult:
-    """
-    Evalúa las respuestas del modelo para Q1-Q4 contra la clave oficial `GROUND_TRUTH_META`.
-    Comparación estricta de cadenas ignorando mayúsculas y espacios.
-    """
+    """Evalúa las respuestas del modelo para Q1-Q4 contra la clave oficial."""
     total_questions = len(ground_truth)
     normalized = parse_meta_input(raw_or_dict_answers)
 
@@ -373,7 +420,7 @@ def evaluate_metalinguistic_answers(
 
 
 # ============================================================================
-# MÓDULO B: DETECCIÓN DE REFRAMING ASINDÉTICO («No es X, es Y»)
+# MÓDULO B: DETECCIÓN DE REFRAMING ASINDÉTICO Y ADVERSATIVO
 # ============================================================================
 
 
@@ -383,10 +430,7 @@ def _clean_inline_whitespace(text: str) -> str:
 
 
 def detect_reframing_in_doc(doc: Doc) -> list[ReframingMatch]:
-    """
-    Detecta construcciones de reframing asindético («No es X, es Y» / «No se trata de X, se trata de Y»)
-    dentro de un documento spaCy.
-    """
+    """Detecta construcciones de reframing («No es X, es Y» / «No era solo X, sino Y»)."""
     matches: list[ReframingMatch] = []
     for sent in doc.sents:
         sent_text = _clean_inline_whitespace(sent.text)
@@ -419,13 +463,8 @@ def _is_header_or_short_line(sent: Span, sent_text: str) -> bool:
 
 def detect_colon_clauses_in_doc(doc: Doc, nlp: Language) -> list[ColonClauseMatch]:
     """
-    Criterio lingüístico estricto con spaCy:
-    1. Segmenta el documento en oraciones (`doc.sents`).
-    2. Filtra aquellas oraciones que contengan `:` en línea (descartando líneas cortas o encabezados).
-    3. Divide la oración por el primer `:` en `segmento_izq` y `segmento_der`.
-    4. Procesa `segmento_der` con spaCy: debe contener al menos un token con `pos_ in ("VERB", "AUX")`
-       y tener más de 3 tokens (descartando taxativamente listas y aposiciones nominales como
-       «modelos: Servio y Macrobio»).
+    Detecta con spaCy oraciones del tipo `[Oración con verbo] : [Oración con verbo (> 3 tokens)]`,
+    descartando listas y aposiciones nominales.
     """
     matches: list[ColonClauseMatch] = []
 
@@ -482,18 +521,142 @@ def count_words_in_doc(doc: Doc) -> int:
 
 
 def calculate_density_per_500w(occurrences: int, total_words: int) -> float:
-    """
-    Fórmula de densidad cada 500 palabras:
-        Densidad = (Total de ocurrencias / Total de palabras) * 500
-    Maneja división por cero en caso de textos vacíos.
-    """
+    """Densidad cada 500 palabras con protección contra división por cero."""
     if total_words <= 0 or occurrences <= 0:
         return 0.0
     return (occurrences / total_words) * 500.0
 
 
 # ============================================================================
-# PIPELINE EN MEMORIA CON ACTIVACIÓN INDEPENDIENTE DE PRUEBAS
+# MÓDULO E: EVALUACIÓN DE DETECCIÓN Y CORRECCIÓN DE ERRORES
+# ============================================================================
+
+
+def parse_error_correction_list(raw_response: str) -> list[ParsedErrorCorrection]:
+    """
+    Parsea la lista numerada o con viñetas devuelta por el LLM con los errores y correcciones.
+    Soporta tanto el formato estructurado (`1. "error" -> "corrección" | explicación`) como
+    variantes libres con flechas (`->`, `→`, `por`, `Corrección:`).
+    """
+    if not raw_response or not raw_response.strip():
+        return []
+
+    items: list[ParsedErrorCorrection] = []
+    lines = [line.strip() for line in raw_response.strip().splitlines() if line.strip()]
+
+    for line in lines:
+        # Filtrar líneas que parezcan ítems de lista (empiezan con número, guion o asterisco, o contienen -> / →)
+        list_match = re.match(r"^(?:(\d+)[\.\)\-\:]|\-|\*|\•)\s*(.+)$", line)
+        if not list_match and ("->" not in line and "→" not in line):
+            continue
+
+        content = list_match.group(2).strip() if list_match else line
+        num = int(list_match.group(1)) if (list_match and list_match.group(1)) else (len(items) + 1)
+
+        # Separar explicación tras '|' o ' — ' o ':' si existe flecha antes
+        explicacion = ""
+        if "|" in content:
+            main_part, explicacion = [p.strip() for p in content.split("|", 1)]
+        else:
+            main_part = content
+
+        # Separar error -> corrección
+        arrow_split = re.split(r"\s*(?:->|→|=>|—>|por:|corrección:)\s*", main_part, maxsplit=1, flags=re.IGNORECASE)
+        if len(arrow_split) == 2:
+            err_part = arrow_split[0].strip(" \"'«»*`")
+            corr_part_raw = arrow_split[1].strip()
+            if not explicacion and (" - " in corr_part_raw or ": " in corr_part_raw):
+                sub_parts = re.split(r"\s+(?:\-|\—|:)\s+", corr_part_raw, maxsplit=1)
+                corr_part = sub_parts[0].strip(" \"'«»*`")
+                explicacion = sub_parts[1].strip() if len(sub_parts) > 1 else ""
+            else:
+                corr_part = corr_part_raw.strip(" \"'«»*`")
+        else:
+            err_part = main_part.strip(" \"'«»*`")
+            corr_part = ""
+
+        items.append(
+            ParsedErrorCorrection(
+                numero=num,
+                error_identificado=err_part,
+                correccion_propuesta=corr_part,
+                explicacion=explicacion,
+                linea_original=line,
+            )
+        )
+
+    return items
+
+
+def evaluate_error_detection(
+    raw_model_response: str,
+    planted_errors: tuple[PlantedError, ...] | None = None,
+) -> ErrorDetectionResult:
+    """
+    Evalúa la respuesta de un modelo en el Benchmark de Detección de Errores.
+    Si `planted_errors` está disponible (textos 1, 2 o 3), verifica cuáles errores claros y
+    sutiles fueron efectivamente detectados por el modelo.
+    """
+    parsed_items = parse_error_correction_list(raw_model_response)
+    if not planted_errors:
+        return ErrorDetectionResult(
+            items_extraidos=parsed_items,
+            tiene_ground_truth=False,
+        )
+
+    response_lower = raw_model_response.lower()
+    lines_lower = [line.strip() for line in raw_model_response.splitlines() if line.strip()]
+
+    detalles: list[PlantedErrorMatchDetail] = []
+    claros_total = sum(1 for e in planted_errors if e.categoria.lower() == "claro")
+    sutiles_total = sum(1 for e in planted_errors if e.categoria.lower() == "sutil")
+    claros_det = 0
+    sutiles_det = 0
+
+    for p_err in planted_errors:
+        matched_line = ""
+        for line in lines_lower:
+            if any(k.lower() in line for k in p_err.claves_busqueda):
+                matched_line = line
+                break
+        if not matched_line and any(k.lower() in response_lower for k in p_err.claves_busqueda):
+            matched_line = "(Mencionado en el cuerpo de la respuesta)"
+
+        is_detected = bool(matched_line)
+        if is_detected:
+            if p_err.categoria.lower() == "claro":
+                claros_det += 1
+            else:
+                sutiles_det += 1
+
+        detalles.append(
+            PlantedErrorMatchDetail(
+                error_plantado=p_err,
+                detectado=is_detected,
+                evidencia_modelo=matched_line if is_detected else "(No detectado)",
+            )
+        )
+
+    total_plantados = len(planted_errors)
+    detectados_total = claros_det + sutiles_det
+    precision = (detectados_total / total_plantados) * 100.0 if total_plantados > 0 else 0.0
+
+    return ErrorDetectionResult(
+        items_extraidos=parsed_items,
+        tiene_ground_truth=True,
+        total_plantados=total_plantados,
+        detectados_total=detectados_total,
+        precision_porcentaje=precision,
+        claros_total=claros_total,
+        claros_detectados=claros_det,
+        sutiles_total=sutiles_total,
+        sutiles_detectados=sutiles_det,
+        detalles_plantados=detalles,
+    )
+
+
+# ============================================================================
+# PIPELINE EN MEMORIA CON ACTIVACIÓN INDEPENDIENTE DE LAS 3 PRUEBAS
 # ============================================================================
 
 
@@ -502,17 +665,25 @@ def audit_text_in_memory(
     raw_text: str,
     nlp: Language | None,
     meta_answers: str | dict[str, str] | None = None,
+    error_response: str = "",
+    planted_errors: tuple[PlantedError, ...] | None = None,
     run_meta: bool = True,
     run_style: bool = True,
+    run_errors: bool = False,
 ) -> ModelAuditResult:
     """
-    Ejecuta las pruebas seleccionadas (`run_meta` y/o `run_style`) en memoria.
-    Si `run_style=False`, no requiere procesar texto con spaCy.
+    Ejecuta las pruebas seleccionadas (`run_meta`, `run_style`, `run_errors`) en memoria.
     """
     meta_result = (
         evaluate_metalinguistic_answers(meta_answers)
         if run_meta
         else MetaEvaluationResult(puntaje_absoluto=0, total_preguntas=len(GROUND_TRUTH_META), precision_porcentaje=0.0)
+    )
+
+    errores_res = (
+        evaluate_error_detection(error_response, planted_errors)
+        if run_errors
+        else ErrorDetectionResult()
     )
 
     cleaned_text = raw_text.strip()
@@ -526,6 +697,7 @@ def audit_text_in_memory(
             densidad_reframing_500w=0.0,
             dos_puntos_matches=[],
             densidad_dos_puntos_500w=0.0,
+            errores_result=errores_res,
         )
 
     doc = nlp(cleaned_text)
@@ -546,18 +718,21 @@ def audit_text_in_memory(
         densidad_reframing_500w=densidad_reframing,
         dos_puntos_matches=colon_matches,
         densidad_dos_puntos_500w=densidad_dos_puntos,
+        errores_result=errores_res,
     )
 
 
 def compare_models_in_memory(
-    models_inputs: list[tuple[str, str, str | dict[str, str] | None]],
+    models_inputs: list[tuple[str, str, str | dict[str, str] | None, str]],
     nlp: Language | None,
+    planted_errors: tuple[PlantedError, ...] | None = None,
     run_meta: bool = True,
     run_style: bool = True,
+    run_errors: bool = False,
 ) -> tuple[pd.DataFrame, list[ModelAuditResult]]:
     """
-    Recibe una lista de tuplas `(nombre_modelo, texto_ensayo, respuestas_meta)` y devuelve
-    el DataFrame comparativo adaptado a las pruebas activas y la lista de resultados detallados.
+    Recibe una lista de tuplas `(nombre_modelo, texto_ensayo, respuestas_meta, respuestas_errores)`
+    y devuelve el DataFrame comparativo adaptado a las pruebas activas y la lista de resultados.
     """
     results: list[ModelAuditResult] = [
         audit_text_in_memory(
@@ -565,14 +740,24 @@ def compare_models_in_memory(
             text,
             nlp,
             meta,
+            error_response=err_resp,
+            planted_errors=planted_errors,
             run_meta=run_meta,
             run_style=run_style,
+            run_errors=run_errors,
         )
-        for name, text, meta in models_inputs
+        for name, text, meta, err_resp in models_inputs
     ]
 
     df_summary = pd.DataFrame(
-        [r.to_summary_dict(include_meta=run_meta, include_style=run_style) for r in results]
+        [
+            r.to_summary_dict(
+                include_meta=run_meta,
+                include_style=run_style,
+                include_errors=run_errors,
+            )
+            for r in results
+        ]
     )
     return df_summary, results
 
@@ -582,12 +767,13 @@ def format_detailed_audit_log(
     spacy_model_used: str = SPACY_MODEL_NAME,
     run_meta: bool = True,
     run_style: bool = True,
+    run_errors: bool = False,
 ) -> str:
     """Genera un informe detallado en texto plano según las pruebas activadas."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     lines: list[str] = [
         "=" * 88,
-        "BENCHMARK DE EVALUACIÓN METALINGÜÍSTICA Y ESTILOMETRÍA PARA LLMs",
+        "BENCHMARK EN VIVO: EVALUACIÓN METALINGÜÍSTICA, ESTILOMETRÍA Y DETECCIÓN DE ERRORES",
         f"Fecha: {timestamp}" + (f" | Modelo spaCy: {spacy_model_used}" if run_style else ""),
         "=" * 88,
         "",
@@ -600,7 +786,7 @@ def format_detailed_audit_log(
 
         if run_meta:
             lines.append(
-                f"[EVALUACIÓN METALINGÜÍSTICA (MULTIPLE CHOICE)]: "
+                f"[PRUEBA 1 - EVALUACIÓN METALINGÜÍSTICA]: "
                 f"{res.meta.puntaje_absoluto}/{res.meta.total_preguntas} "
                 f"({res.meta.precision_porcentaje:.1f}%)"
             )
@@ -614,33 +800,39 @@ def format_detailed_audit_log(
 
         if run_style:
             lines.append(
-                f"[ESTADÍSTICAS DE CORPUS]: {res.palabras_totales} palabras | {res.oraciones_totales} oraciones"
+                f"[PRUEBA 2 - ESTADÍSTICAS DE CORPUS]: {res.palabras_totales} palabras | {res.oraciones_totales} oraciones"
             )
+            lines.append(
+                f"  * Tic 1 - Reframing: {res.total_reframing} ocurr. ({res.densidad_reframing_500w:.2f} / 500w)"
+            )
+            for idx, m in enumerate(res.reframing_matches, 1):
+                lines.append(f"    {idx}. Fragmento: «{m.fragmento_coincidente}» | Oración: {m.oracion_contexto}")
+            lines.append(
+                f"  * Tic 2 - Dos puntos oracionales: {res.total_dos_puntos} ocurr. ({res.densidad_dos_puntos_500w:.2f} / 500w)"
+            )
+            for idx, m in enumerate(res.dos_puntos_matches, 1):
+                verbos = ", ".join(m.verbos_detectados_der)
+                lines.append(f"    {idx}. Oración: {m.oracion_completa} (Verbos 2° prop.: {verbos})")
             lines.append("")
 
-            lines.append(
-                f"[TIC 1 - REFRAMING ASINDÉTICO («No es X, es Y»)]: "
-                f"{res.total_reframing} ocurrencias (Densidad: {res.densidad_reframing_500w:.2f} / 500w)"
-            )
-            if res.reframing_matches:
-                for idx, m in enumerate(res.reframing_matches, 1):
-                    lines.append(f"  {idx}. Fragmento: «{m.fragmento_coincidente}»")
-                    lines.append(f"     Oración: {m.oracion_contexto}")
+        if run_errors:
+            er = res.errores_result
+            if er.tiene_ground_truth:
+                lines.append(
+                    f"[PRUEBA 3 - DETECCIÓN DE ERRORES]: {er.detectados_total}/{er.total_plantados} "
+                    f"({er.precision_porcentaje:.1f}%) | Claros: {er.claros_detectados}/{er.claros_total} | "
+                    f"Sutiles: {er.sutiles_detectados}/{er.sutiles_total}"
+                )
+                for det_e in er.detalles_plantados:
+                    est = "DETECTADO" if det_e.detectado else "OMITIDO"
+                    lines.append(
+                        f"  - #{det_e.error_plantado.orden} [{det_e.error_plantado.categoria}] "
+                        f"«{det_e.error_plantado.fragmento_erroneo}» -> [{est}]"
+                    )
             else:
-                lines.append("  (Sin ocurrencias detectadas)")
-            lines.append("")
-
-            lines.append(
-                f"[TIC 2 - DOS PUNTOS ORACIONALES ([Oración] : [Oración con verbo])]: "
-                f"{res.total_dos_puntos} ocurrencias (Densidad: {res.densidad_dos_puntos_500w:.2f} / 500w)"
-            )
-            if res.dos_puntos_matches:
-                for idx, m in enumerate(res.dos_puntos_matches, 1):
-                    verbos = ", ".join(m.verbos_detectados_der)
-                    lines.append(f"  {idx}. Oración: {m.oracion_completa}")
-                    lines.append(f"     -> 2° proposición: «{m.segmento_derecho}» (Verbos: {verbos})")
-            else:
-                lines.append("  (Sin ocurrencias detectadas)")
+                lines.append(f"[PRUEBA 3 - DETECCIÓN DE ERRORES (TEXTO PROPIO)]: {len(er.items_extraidos)} ítems reportados")
+                for item in er.items_extraidos:
+                    lines.append(f"  {item.numero}. {item.error_identificado} -> {item.correccion_propuesta}")
             lines.append("")
 
     return "\n".join(lines)

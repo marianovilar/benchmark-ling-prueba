@@ -1,9 +1,11 @@
 """
 app.py - Interfaz interactiva en Streamlit para comparar 2 modelos en vivo (ideal para clases y GitHub).
 
-Permite activar o desactivar libremente cualquiera de las dos pruebas:
+Permite activar o desactivar libremente cualquiera de las pruebas:
 - Prueba 1: evaluación metalingüística objetiva (opción múltiple Q1-Q4 contra ground truth).
-- Prueba 2: auditoría estilística en prosa (reframing asindético + dos puntos oracionales con spaCy).
+- Prueba 2: auditoría estilística en prosa (reframing asindético/adversativo + dos puntos oracionales con spaCy).
+- Prueba 3: detección y corrección de errores de redacción y ortografía (sobre 3 textos de ~1000 palabras
+  con errores claros y sutiles, o subiendo/pegando un texto propio).
 
 Ejecución:
     streamlit run app.py
@@ -31,6 +33,13 @@ from auditor import (
     format_detailed_audit_log,
     get_metalinguistic_prompt_text,
     load_spacy_model,
+)
+from textos_errores import (
+    BANCO_TEXTOS_ERRORES,
+    DEMO_RESPUESTA_ERRORES_MODELO_A,
+    DEMO_RESPUESTA_ERRORES_MODELO_B,
+    PlantedError,
+    build_error_detection_prompt,
 )
 
 # ============================================================================
@@ -123,7 +132,7 @@ def init_session_state() -> None:
     if "nombre_a" not in st.session_state:
         st.session_state["nombre_a"] = "Modelo A (ej. GPT-4o)"
     if "nombre_b" not in st.session_state:
-        st.session_state["nombre_b"] = "Modelo B (ej. Claude 3.5)"
+        st.session_state["nombre_b"] = "Modelo B (ej. modelo pequeño / gratis)"
     if "meta_input_a" not in st.session_state:
         st.session_state["meta_input_a"] = META_DEMO_MODELO_A
     if "meta_input_b" not in st.session_state:
@@ -132,10 +141,16 @@ def init_session_state() -> None:
         st.session_state["texto_a"] = TEXTO_DEMO_MODELO_A
     if "texto_b" not in st.session_state:
         st.session_state["texto_b"] = TEXTO_DEMO_MODELO_B
+    if "error_input_a" not in st.session_state:
+        st.session_state["error_input_a"] = DEMO_RESPUESTA_ERRORES_MODELO_A
+    if "error_input_b" not in st.session_state:
+        st.session_state["error_input_b"] = DEMO_RESPUESTA_ERRORES_MODELO_B
     if "run_meta" not in st.session_state:
         st.session_state["run_meta"] = True
     if "run_style" not in st.session_state:
         st.session_state["run_style"] = True
+    if "run_errors" not in st.session_state:
+        st.session_state["run_errors"] = True
 
 
 def load_demo_texts() -> None:
@@ -143,6 +158,8 @@ def load_demo_texts() -> None:
     st.session_state["meta_input_b"] = META_DEMO_MODELO_B
     st.session_state["texto_a"] = TEXTO_DEMO_MODELO_A
     st.session_state["texto_b"] = TEXTO_DEMO_MODELO_B
+    st.session_state["error_input_a"] = DEMO_RESPUESTA_ERRORES_MODELO_A
+    st.session_state["error_input_b"] = DEMO_RESPUESTA_ERRORES_MODELO_B
 
 
 def clear_texts() -> None:
@@ -150,6 +167,8 @@ def clear_texts() -> None:
     st.session_state["meta_input_b"] = ""
     st.session_state["texto_a"] = ""
     st.session_state["texto_b"] = ""
+    st.session_state["error_input_a"] = ""
+    st.session_state["error_input_b"] = ""
 
 
 # ============================================================================
@@ -161,7 +180,7 @@ def render_header_and_prompts() -> None:
     st.title("📐 Benchmark en vivo: evaluación metalingüística y estilometría de LLMs")
     st.markdown(
         "Compara dos modelos de lenguaje en español pegando sus respuestas lado a lado. "
-        "Puedes ejecutar **ambas pruebas al mismo tiempo o activar solo una** según lo que quieras mostrar en clase."
+        "Puedes activar o desactivar libremente cualquiera de las **tres pruebas** según el objetivo de la clase."
     )
 
     col_guide, col_links = st.columns(2)
@@ -171,14 +190,12 @@ def render_header_and_prompts() -> None:
             st.markdown(
                 """
                 1. **🧪 Prueba 1 — Test metalingüístico (opción múltiple Q1–Q4):**
-                   Evalúa precisión gramatical normativa (0 a 4 puntos) en:
-                   - `Q1`: Concordancia con colectivos partitivos (*clave: B*)
-                   - `Q2`: Impersonal con *se* y acusativo animado (*clave: C*)
-                   - `Q3`: Régimen preposicional y queísmo/dequeísmo (*clave: C*)
-                   - `Q4`: Gerundio de posterioridad temporal (*clave: B*)
+                   Evalúa precisión gramatical normativa (0 a 4 puntos) en concordancia de colectivos, impersonal con *se*, queísmo/dequeísmo y gerundio de posterioridad.
                 2. **✍️ Prueba 2 — Auditoría estilística en prosa (reframing + dos puntos):**
-                   - **Tic 1 — Reframing asindético y adversativo (*«No es X, es Y»* / *«No era solo X, sino Y»*):** Fórmulas binarias donde se niega un término para reformularlo tras coma o punto y coma (con o sin *sino*).
+                   - **Tic 1 — Reframing asindético y adversativo (*«No es X, es Y»* / *«No era solo X, sino Y»*):** Fórmulas binarias donde se niega un término para reformularlo tras coma o punto y coma.
                    - **Tic 2 — Dos puntos oracionales (`[Oración] : [Oración con verbo]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado (`VERB`/`AUX`), descartando listas y aposiciones nominales.
+                3. **🔎 Prueba 3 — Detección y corrección de errores en textos largos (~1000 palabras):**
+                   Mide cuántos errores **claros** (ortografía, homófonos, *haber* pluralizado) y **sutiles** (coma entre sujeto y verbo, dequeísmo/queísmo, quesuismo, gerundio de posterioridad o del Boletín Oficial, paronimia) logra encontrar y corregir el modelo en orden de aparición.
                 """
             )
 
@@ -198,7 +215,7 @@ def render_header_and_prompts() -> None:
                 """
             )
 
-    # Ventanas separadas de ancho completo para visualizar cada prompt entero sin scroll horizontal
+    # Ventanas separadas para los prompts de las pruebas 1 y 2
     with st.expander("📋 Prompt 1: test metalingüístico (Q1–Q4)", expanded=False):
         st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
         st.code(get_metalinguistic_prompt_text(), language=None, wrap_lines=True)
@@ -212,6 +229,90 @@ def render_header_and_prompts() -> None:
         with st.expander("📋 Prompt 3: ensayo sobre IA y estilo (opción 2)", expanded=False):
             st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
             st.code(PROMPTS_SUGERIDOS[1]["prompt"], language=None, wrap_lines=True)
+
+
+def render_error_benchmark_selector() -> tuple[str, tuple[PlantedError, ...] | None]:
+    """
+    Renderiza el selector de los 3 textos de ~1000 palabras con errores (o carga de texto propio)
+    y muestra la ventana separada con el prompt estructurado listo para copiar.
+    Retorna `(texto_seleccionado, errores_plantados_o_None)`.
+    """
+    st.markdown("#### 🔎 Configuración de la prueba 3: selección de texto con errores y prompt estructurado")
+
+    opciones_selector = {
+        "texto_1": BANCO_TEXTOS_ERRORES["texto_1"].titulo,
+        "texto_2": BANCO_TEXTOS_ERRORES["texto_2"].titulo,
+        "texto_3": BANCO_TEXTOS_ERRORES["texto_3"].titulo,
+        "custom": "📂 Subir o pegar otro texto propio (.txt o texto libre)",
+    }
+
+    seleccion = st.selectbox(
+        "Elige uno de los 3 textos de ejemplo (~1000 palabras) o sube un texto propio:",
+        options=list(opciones_selector.keys()),
+        format_func=lambda k: opciones_selector[k],
+    )
+
+    if seleccion != "custom":
+        bench_obj = BANCO_TEXTOS_ERRORES[seleccion]
+        st.caption(bench_obj.descripcion)
+        texto_activo = bench_obj.texto
+        errores_plantados: tuple[PlantedError, ...] | None = bench_obj.errores
+
+        col_prompt_err, col_clave_err = st.columns([3, 2])
+        with col_prompt_err:
+            with st.expander(
+                f"📋 Prompt 4: búsqueda estructurada de errores ({bench_obj.id.replace('_', ' ')})",
+                expanded=False,
+            ):
+                st.caption("Incluye la instrucción estructurada + el texto completo (~1000 palabras) listo para copiar:")
+                st.code(build_error_detection_prompt(texto_activo), language=None, wrap_lines=True)
+        with col_clave_err:
+            with st.expander(
+                f"🔑 Ver clave de los {len(bench_obj.errores)} errores ocultos en este texto",
+                expanded=False,
+            ):
+                rows_gt = [
+                    {
+                        "#": e.orden,
+                        "Tipo": e.categoria,
+                        "Fenómeno": e.fenomeno,
+                        "Error en el texto": e.fragmento_erroneo,
+                        "Corrección": e.correccion_esperada,
+                    }
+                    for e in bench_obj.errores
+                ]
+                st.dataframe(pd.DataFrame(rows_gt), use_container_width=True, hide_index=True)
+    else:
+        errores_plantados = None
+        up_col, txt_col = st.columns([1, 2])
+        with up_col:
+            uploaded_file = st.file_uploader(
+                "Sube un archivo .txt con tu texto:",
+                type=["txt"],
+            )
+            default_custom_text = ""
+            if uploaded_file is not None:
+                raw_bytes = uploaded_file.read()
+                try:
+                    default_custom_text = raw_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    default_custom_text = raw_bytes.decode("latin-1", errors="ignore")
+        with txt_col:
+            texto_activo = st.text_area(
+                "O pega / edita aquí tu propio texto con errores:",
+                value=default_custom_text,
+                height=160,
+                placeholder="Pega aquí el texto que quieras que los modelos corrijan...",
+            )
+
+        with st.expander("📋 Prompt 4: búsqueda estructurada de errores (con tu texto propio)", expanded=True):
+            if texto_activo.strip():
+                st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
+                st.code(build_error_detection_prompt(texto_activo), language=None, wrap_lines=True)
+            else:
+                st.info("Sube o pega un texto arriba para generar automáticamente el prompt estructurado.")
+
+    return texto_activo, errores_plantados
 
 
 def render_metalinguistic_comparison(res_a: ModelAuditResult, res_b: ModelAuditResult) -> None:
@@ -236,6 +337,84 @@ def render_metalinguistic_comparison(res_a: ModelAuditResult, res_b: ModelAuditR
         )
 
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def render_error_detection_comparison(res_a: ModelAuditResult, res_b: ModelAuditResult) -> None:
+    """Muestra los resultados comparativos de la Prueba 3 (Detección y corrección de errores)."""
+    st.subheader("🔎 Desglose de la prueba 3: detección y corrección de errores")
+
+    er_a = res_a.errores_result
+    er_b = res_b.errores_result
+
+    if er_a.tiene_ground_truth and er_b.tiene_ground_truth:
+        m_col1, m_col2 = st.columns(2)
+        with m_col1:
+            st.markdown(f"**{res_a.modelo}**")
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Total detectados", f"{er_a.detectados_total}/{er_a.total_plantados}", f"{er_a.precision_porcentaje:.1f}%")
+            k2.metric("Errores claros", f"{er_a.claros_detectados}/{er_a.claros_total}")
+            k3.metric("Errores sutiles", f"{er_a.sutiles_detectados}/{er_a.sutiles_total}")
+        with m_col2:
+            st.markdown(f"**{res_b.modelo}**")
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Total detectados", f"{er_b.detectados_total}/{er_b.total_plantados}", f"{er_b.precision_porcentaje:.1f}%")
+            k2.metric("Errores claros", f"{er_b.claros_detectados}/{er_b.claros_total}")
+            k3.metric("Errores sutiles", f"{er_b.sutiles_detectados}/{er_b.sutiles_total}")
+
+        rows_err = []
+        for det_a, det_b in zip(er_a.detalles_plantados, er_b.detalles_plantados):
+            pe = det_a.error_plantado
+            badge_tipo = "🟢 Claro" if pe.categoria.lower() == "claro" else "🟣 Sutil"
+            rows_err.append(
+                {
+                    "Orden": pe.orden,
+                    "Dificultad": badge_tipo,
+                    "Fenómeno": pe.fenomeno,
+                    "Error en el texto": pe.fragmento_erroneo,
+                    "Corrección esperada": pe.correccion_esperada,
+                    f"{res_a.modelo}": "✅ Detectado" if det_a.detectado else "❌ Omitido",
+                    f"{res_b.modelo}": "✅ Detectado" if det_b.detectado else "❌ Omitido",
+                }
+            )
+        st.dataframe(pd.DataFrame(rows_err), use_container_width=True, hide_index=True)
+
+    # Mostrar las listas estructuradas parseadas de cada modelo lado a lado
+    with st.expander("📋 Ver lista estructurada de correcciones extraída de cada modelo", expanded=not er_a.tiene_ground_truth):
+        c_left, c_right = st.columns(2)
+        with c_left:
+            st.markdown(f"**{res_a.modelo}** ({len(er_a.items_extraidos)} ítems listados)")
+            if er_a.items_extraidos:
+                df_items_a = pd.DataFrame(
+                    [
+                        {
+                            "#": it.numero,
+                            "Error señalado": it.error_identificado,
+                            "Corrección": it.correccion_propuesta,
+                            "Explicación": it.explicacion,
+                        }
+                        for it in er_a.items_extraidos
+                    ]
+                )
+                st.dataframe(df_items_a, use_container_width=True, hide_index=True)
+            else:
+                st.info("No se detectaron ítems en formato de lista para el modelo 1.")
+        with c_right:
+            st.markdown(f"**{res_b.modelo}** ({len(er_b.items_extraidos)} ítems listados)")
+            if er_b.items_extraidos:
+                df_items_b = pd.DataFrame(
+                    [
+                        {
+                            "#": it.numero,
+                            "Error señalado": it.error_identificado,
+                            "Corrección": it.correccion_propuesta,
+                            "Explicación": it.explicacion,
+                        }
+                        for it in er_b.items_extraidos
+                    ]
+                )
+                st.dataframe(df_items_b, use_container_width=True, hide_index=True)
+            else:
+                st.info("No se detectaron ítems en formato de lista para el modelo 2.")
 
 
 def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = True) -> None:
@@ -319,33 +498,44 @@ def main() -> None:
     # SELECTOR DE PRUEBAS ACTIVAS Y BOTONES DE DEMOSTRACIÓN
     # ========================================================================
     st.markdown("#### ⚙️ Selecciona qué pruebas deseas ejecutar:")
-    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([3, 3, 2, 2])
+    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5 = st.columns([2.5, 2.5, 2.5, 1.25, 1.25])
     with ctrl1:
         run_meta = st.toggle(
-            "🧪 Prueba 1: test metalingüístico (opción múltiple Q1–Q4)",
+            "🧪 Prueba 1: test metalingüístico (Q1–Q4)",
             key="run_meta",
         )
     with ctrl2:
         run_style = st.toggle(
-            "✍️ Prueba 2: auditoría estilística (reframing + dos puntos)",
+            "✍️ Prueba 2: auditoría estilística",
             key="run_style",
         )
     with ctrl3:
-        st.button(
-            "✨ Cargar ejemplo",
-            on_click=load_demo_texts,
-            use_container_width=True,
+        run_errors = st.toggle(
+            "🔎 Prueba 3: detección de errores (~1000w)",
+            key="run_errors",
         )
     with ctrl4:
         st.button(
-            "🧹 Limpiar cajas",
+            "✨ Ejemplo",
+            on_click=load_demo_texts,
+            use_container_width=True,
+        )
+    with ctrl5:
+        st.button(
+            "🧹 Limpiar",
             on_click=clear_texts,
             use_container_width=True,
         )
 
-    if not run_meta and not run_style:
-        st.warning("Activa al menos una de las dos pruebas con los interruptores de arriba para continuar.")
+    if not run_meta and not run_style and not run_errors:
+        st.warning("Activa al menos una de las tres pruebas con los interruptores de arriba para continuar.")
         return
+
+    planted_errors: tuple[PlantedError, ...] | None = None
+    if run_errors:
+        st.divider()
+        _, planted_errors = render_error_benchmark_selector()
+        st.divider()
 
     # ========================================================================
     # DOS PANELES PARALELOS (MODELO 1 vs MODELO 2) SEGÚN PRUEBAS ACTIVAS
@@ -358,7 +548,7 @@ def main() -> None:
             meta_input_a = st.text_area(
                 "🧪 Respuestas del test metalingüístico (Q1–Q4) — Modelo 1:",
                 key="meta_input_a",
-                height=100,
+                height=90,
                 help=(
                     'Pega el JSON del modelo (ej: {"q1": "B", "q2": "C", "q3": "C", "q4": "B"}), '
                     'o texto como "1: B, 2: C, 3: C, 4: B", o las 4 letras "B, C, C, B".'
@@ -372,11 +562,21 @@ def main() -> None:
             texto_a = st.text_area(
                 "✍️ Texto ensayístico para estilometría — Modelo 1:",
                 key="texto_a",
-                height=260,
+                height=220,
                 placeholder="Copia y pega aquí el ensayo generado por el modelo 1...",
             )
         else:
             texto_a = ""
+
+        if run_errors:
+            error_input_a = st.text_area(
+                "🔎 Lista ordenada de errores y correcciones — Modelo 1:",
+                key="error_input_a",
+                height=220,
+                placeholder='Pega aquí la lista numerada de errores que encontró el modelo 1 (ej: 1. "error" -> "corrección" | explicación)...',
+            )
+        else:
+            error_input_a = ""
 
     with col_b:
         nombre_b = st.text_input("Nombre del modelo 2", key="nombre_b")
@@ -384,7 +584,7 @@ def main() -> None:
             meta_input_b = st.text_area(
                 "🧪 Respuestas del test metalingüístico (Q1–Q4) — Modelo 2:",
                 key="meta_input_b",
-                height=100,
+                height=90,
                 help=(
                     'Pega el JSON del modelo (ej: {"q1": "A", "q2": "C", "q3": "B", "q4": "B"}), '
                     'o texto como "1: A, 2: C, 3: B, 4: B", o las 4 letras "A, C, B, B".'
@@ -398,11 +598,21 @@ def main() -> None:
             texto_b = st.text_area(
                 "✍️ Texto ensayístico para estilometría — Modelo 2:",
                 key="texto_b",
-                height=260,
+                height=220,
                 placeholder="Copia y pega aquí el ensayo generado por el modelo 2...",
             )
         else:
             texto_b = ""
+
+        if run_errors:
+            error_input_b = st.text_area(
+                "🔎 Lista ordenada de errores y correcciones — Modelo 2:",
+                key="error_input_b",
+                height=220,
+                placeholder='Pega aquí la lista numerada de errores que encontró el modelo 2 (ej: 1. "error" -> "corrección" | explicación)...',
+            )
+        else:
+            error_input_b = ""
 
     # ========================================================================
     # BOTÓN DE EJECUCIÓN Y PANEL DE RESULTADOS
@@ -412,14 +622,6 @@ def main() -> None:
         type="primary",
         use_container_width=True,
     )
-
-    if run_style and not texto_a.strip() and not texto_b.strip() and not run_meta:
-        st.info("Pega el texto ensayístico de al menos un modelo para calcular la estilometría.")
-        return
-
-    if run_meta and not meta_input_a.strip() and not meta_input_b.strip() and not run_style:
-        st.info("Pega las respuestas del test metalingüístico (Q1–Q4) de al menos un modelo para evaluar.")
-        return
 
     nlp: Language | None = None
     model_loaded = SPACY_MODEL_NAME
@@ -432,12 +634,14 @@ def main() -> None:
 
     df_summary, results = compare_models_in_memory(
         [
-            (nombre_a or "Modelo A", texto_a, meta_input_a),
-            (nombre_b or "Modelo B", texto_b, meta_input_b),
+            (nombre_a or "Modelo A", texto_a, meta_input_a, error_input_a),
+            (nombre_b or "Modelo B", texto_b, meta_input_b, error_input_b),
         ],
         nlp=nlp,
+        planted_errors=planted_errors,
         run_meta=run_meta,
         run_style=run_style,
+        run_errors=run_errors,
     )
 
     # 1. Tabla resumen general adaptada a las pruebas activas
@@ -455,6 +659,12 @@ def main() -> None:
                 min_value=0,
                 max_value=100,
             ),
+            "Detección errores (%)": st.column_config.ProgressColumn(
+                "Detección errores (%)",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100,
+            ),
             "Densidad reframing / 500w": st.column_config.NumberColumn(format="%.2f"),
             "Densidad dos puntos / 500w": st.column_config.NumberColumn(format="%.2f"),
         },
@@ -465,7 +675,12 @@ def main() -> None:
         st.divider()
         render_metalinguistic_comparison(results[0], results[1])
 
-    # 3. Si la Prueba 2 (estilometría) está activa, mostrar gráfico de barras y visor cualitativo
+    # 3. Si la Prueba 3 (detección de errores) está activa, mostrar desglose claros vs sutiles
+    if run_errors:
+        st.divider()
+        render_error_detection_comparison(results[0], results[1])
+
+    # 4. Si la Prueba 2 (estilometría) está activa, mostrar gráfico de barras y visor cualitativo
     if run_style:
         st.divider()
         st.subheader("📈 Comparativa de densidad de tics sintácticos (cada 500 palabras)")
@@ -487,7 +702,7 @@ def main() -> None:
         with ev_col_b:
             render_model_evidence_card(results[1], show_meta_metric=run_meta)
 
-    # 4. Botones de descarga en memoria
+    # 5. Botones de descarga en memoria
     st.divider()
     dl1, dl2 = st.columns(2)
     with dl1:
@@ -504,6 +719,7 @@ def main() -> None:
             spacy_model_used=model_loaded,
             run_meta=run_meta,
             run_style=run_style,
+            run_errors=run_errors,
         )
         st.download_button(
             "📄 Descargar informe detallado (TXT)",
