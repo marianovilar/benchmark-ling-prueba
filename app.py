@@ -147,7 +147,7 @@ def render_header_and_prompts() -> None:
         "Puedes ejecutar **ambas pruebas al mismo tiempo o activar solo una** según lo que quieras mostrar en clase."
     )
 
-    col_guide, col_prompts = st.columns(2)
+    col_guide, col_prompts, col_links = st.columns(3)
 
     with col_guide:
         with st.expander("📖 ¿Qué evalúa cada prueba?", expanded=False):
@@ -166,13 +166,29 @@ def render_header_and_prompts() -> None:
             )
 
     with col_prompts:
-        with st.expander("📋 Prompts listos para copiar y probar en clase (Test + Ensayo)", expanded=False):
+        with st.expander("📋 Prompts listos para copiar (Test + Ensayo)", expanded=False):
             st.markdown("**1. Prompt para el Test Metalingüístico (Q1–Q4):**")
             st.code(get_metalinguistic_prompt_text(), language="markdown")
             st.markdown("**2. Prompts para el Texto Ensayístico (Estilometría):**")
             for item in PROMPTS_SUGERIDOS:
                 st.caption(item["titulo"])
                 st.code(item["prompt"], language="markdown")
+
+    with col_links:
+        with st.expander("🌐 Modelos gratuitos y alternativos para probar en clase", expanded=False):
+            st.markdown(
+                """
+                Además de los modelos comerciales conocidos (ChatGPT, Gemini, Claude), puedes usar estos sitios **gratuitos** para probar modelos abiertos, pequeños (7B–9B) o menos conocidos:
+
+                * 🏟️ **[LMArena (Chatbot Arena)](https://lmarena.ai/)** *(Recomendado)* — Usa la pestaña *Side-by-Side* o *Direct Chat* para probar gratis y sin cuenta docenas de modelos grandes y pequeños (`Llama`, `Gemma`, `Qwen`, `Mistral`, `Command-R`, `Phi`, `Yi`, etc.).
+                * 🦆 **[Duck.ai (DuckDuckGo AI Chat)](https://duck.ai/)** — Gratis y sin registro. Permite alternar entre modelos ligeros (`Mistral Small`, `Llama 3`, `Claude Haiku`, `GPT-4o mini`).
+                * 🧪 **[AllenAI Playground (OLMo)](https://playground.allenai.org/)** — Modelos académicos *open-source* pequeños (`OLMo 7B / 13B / 32B`), ideales para contrastar fallos gramaticales frente a modelos gigantes.
+                * 🤗 **[HuggingChat](https://huggingface.co/chat/)** — Acceso gratuito a modelos abiertos variados (`Qwen`, `Cohere Command R`, `Llama`, `SmolLM`).
+                * 🇫🇷 **[Le Chat — Mistral AI](https://chat.mistral.ai/)** — Modelo europeo gratuito en el navegador.
+                * 🐉 **[Qwen Chat (Alibaba)](https://chat.qwen.ai/)** — Permite elegir distintas variantes de tamaño de la familia `Qwen` gratis.
+                * 🐋 **[DeepSeek Chat](https://chat.deepseek.com/)** — Modelo gratuito alternativo útil para comparar tics retóricos en español.
+                """
+            )
 
 
 def render_metalinguistic_comparison(res_a: ModelAuditResult, res_b: ModelAuditResult) -> None:
