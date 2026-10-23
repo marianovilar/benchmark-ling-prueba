@@ -1,11 +1,12 @@
 """
 app.py - Interfaz interactiva en Streamlit para comparar 2 modelos en vivo (ideal para clases y GitHub).
 
-Permite activar o desactivar libremente cualquiera de las pruebas:
+Permite activar o desactivar libremente cualquiera de las tres pruebas (todas basadas en clave
+de respuestas correcta / ground truth determinista, sin usar un LLM como juez):
 - Prueba 1: evaluación metalingüística objetiva (opción múltiple Q1-Q4 contra ground truth).
 - Prueba 2: auditoría estilística en prosa (reframing asindético/adversativo + dos puntos oracionales con spaCy).
 - Prueba 3: detección y corrección de errores de redacción y ortografía (sobre 3 textos de ~1000 palabras
-  con errores claros y sutiles, o subiendo/pegando un texto propio).
+  con clave de errores claros y sutiles, o un texto propio con su clave de errores).
 
 Ejecución:
     streamlit run app.py
@@ -14,11 +15,19 @@ Ejecución:
 from __future__ import annotations
 
 import html
+import importlib
 import re
 
 import pandas as pd
 import streamlit as st
 from spacy.language import Language
+
+import textos_errores
+import auditor
+
+# Recargar módulos para evitar que Streamlit Cloud conserve versiones en caché tras un git push
+importlib.reload(textos_errores)
+importlib.reload(auditor)
 
 from auditor import (
     GROUND_TRUTH_META,
@@ -123,6 +132,45 @@ def highlight_colon_clause_html(seg_izq: str, seg_der: str, verbos_der: list[str
     return f"{izq_html}{colon_badge}<span style='text-decoration: underline dotted #555;'>{der_html}</span>"
 
 
+def parse_custom_ground_truth_errors(raw_gt_lines: str) -> tuple[PlantedError, ...]:
+    """
+    Convierte una lista manual de errores esperados escrita por el docente
+    (formato: `Claro | error -> corrección` o simplemente `error -> corrección` por línea)
+    en objetos `PlantedError` para poder evaluar cualquier texto propio contra una clave fija.
+    """
+    errors: list[PlantedError] = []
+    for idx, line in enumerate(raw_gt_lines.strip().splitlines(), start=1):
+        clean = line.strip()
+        if not clean:
+            continue
+        categoria = "Claro"
+        if "|" in clean:
+            cat_part, rest = [p.strip() for p in clean.split("|", 1)]
+            if "sutil" in cat_part.lower():
+                categoria = "Sutil"
+            clean = rest
+
+        if "->" in clean:
+            err_frag, corr_frag = [p.strip(" \"'«»") for p in clean.split("->", 1)]
+        else:
+            err_frag = clean.strip(" \"'«»")
+            corr_frag = "(Ver corrección)"
+
+        if err_frag:
+            keys = tuple(k for k in (err_frag.lower(), corr_frag.lower()) if k and k != "(ver corrección)")
+            errors.append(
+                PlantedError(
+                    orden=idx,
+                    categoria=categoria,
+                    fenomeno="Error definido por el usuario",
+                    fragmento_erroneo=err_frag,
+                    correccion_esperada=corr_frag,
+                    claves_busqueda=keys,
+                )
+            )
+    return tuple(errors)
+
+
 # ============================================================================
 # ESTADO INICIAL DE LA SESIÓN (DATOS DE DEMOSTRACIÓN)
 # ============================================================================
@@ -190,12 +238,12 @@ def render_header_and_prompts() -> None:
             st.markdown(
                 """
                 1. **🧪 Prueba 1 — Test metalingüístico (opción múltiple Q1–Q4):**
-                   Evalúa precisión gramatical normativa (0 a 4 puntos) en concordancia de colectivos, impersonal con *se*, queísmo/dequeísmo y gerundio de posterioridad.
+                   Evalúa precisión gramatical normativa (0 a 4 puntos) contra una clave fija (*ground truth*).
                 2. **✍️ Prueba 2 — Auditoría estilística en prosa (reframing + dos puntos):**
                    - **Tic 1 — Reframing asindético y adversativo (*«No es X, es Y»* / *«No era solo X, sino Y»*):** Fórmulas binarias donde se niega un término para reformularlo tras coma o punto y coma.
-                   - **Tic 2 — Dos puntos oracionales (`[Oración] : [Oración con verbo]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado (`VERB`/`AUX`), descartando listas y aposiciones nominales.
+                   - **Tic 2 — Dos puntos oracionales (`[Oración] : [Oración con verbo]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado (`VERB`/`AUX`).
                 3. **🔎 Prueba 3 — Detección y corrección de errores en textos largos (~1000 palabras):**
-                   Mide cuántos errores **claros** (ortografía, homófonos, *haber* pluralizado) y **sutiles** (coma entre sujeto y verbo, dequeísmo/queísmo, quesuismo, gerundio de posterioridad o del Boletín Oficial, paronimia) logra encontrar y corregir el modelo en orden de aparición.
+                   Compara la lista de errores que encuentra el modelo contra una **clave oficial de errores plantados** (divididos en **claros** y **sutiles**).
                 """
             )
 
@@ -233,21 +281,20 @@ def render_header_and_prompts() -> None:
 
 def render_error_benchmark_selector() -> tuple[str, tuple[PlantedError, ...] | None]:
     """
-    Renderiza el selector de los 3 textos de ~1000 palabras con errores (o carga de texto propio)
-    y muestra la ventana separada con el prompt estructurado listo para copiar.
-    Retorna `(texto_seleccionado, errores_plantados_o_None)`.
+    Renderiza el selector de los 3 textos de ~1000 palabras con errores (o carga de texto propio
+    con su clave de errores) y muestra la ventana separada con el prompt estructurado listo para copiar.
     """
-    st.markdown("#### 🔎 Configuración de la prueba 3: selección de texto con errores y prompt estructurado")
+    st.markdown("#### 🔎 Configuración de la prueba 3: texto con errores (~1000 palabras) y clave de corrección")
 
     opciones_selector = {
         "texto_1": BANCO_TEXTOS_ERRORES["texto_1"].titulo,
         "texto_2": BANCO_TEXTOS_ERRORES["texto_2"].titulo,
         "texto_3": BANCO_TEXTOS_ERRORES["texto_3"].titulo,
-        "custom": "📂 Subir o pegar otro texto propio (.txt o texto libre)",
+        "custom": "📂 Usar otro texto propio + definir su lista de errores esperados",
     }
 
     seleccion = st.selectbox(
-        "Elige uno de los 3 textos de ejemplo (~1000 palabras) o sube un texto propio:",
+        "Elige uno de los 3 textos con clave de errores ya identificada (o carga uno propio):",
         options=list(opciones_selector.keys()),
         format_func=lambda k: opciones_selector[k],
     )
@@ -258,36 +305,33 @@ def render_error_benchmark_selector() -> tuple[str, tuple[PlantedError, ...] | N
         texto_activo = bench_obj.texto
         errores_plantados: tuple[PlantedError, ...] | None = bench_obj.errores
 
-        col_prompt_err, col_clave_err = st.columns([3, 2])
-        with col_prompt_err:
-            with st.expander(
-                f"📋 Prompt 4: búsqueda estructurada de errores ({bench_obj.id.replace('_', ' ')})",
-                expanded=False,
-            ):
-                st.caption("Incluye la instrucción estructurada + el texto completo (~1000 palabras) listo para copiar:")
-                st.code(build_error_detection_prompt(texto_activo), language=None, wrap_lines=True)
-        with col_clave_err:
-            with st.expander(
-                f"🔑 Ver clave de los {len(bench_obj.errores)} errores ocultos en este texto",
-                expanded=False,
-            ):
-                rows_gt = [
-                    {
-                        "#": e.orden,
-                        "Tipo": e.categoria,
-                        "Fenómeno": e.fenomeno,
-                        "Error en el texto": e.fragmento_erroneo,
-                        "Corrección": e.correccion_esperada,
-                    }
-                    for e in bench_obj.errores
-                ]
-                st.dataframe(pd.DataFrame(rows_gt), use_container_width=True, hide_index=True)
+        with st.expander(
+            f"📋 Prompt 4: búsqueda estructurada de errores (incluye el {bench_obj.id.replace('_', ' ')} completo para copiar)",
+            expanded=False,
+        ):
+            st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro) y pégalo en ambos modelos:")
+            st.code(build_error_detection_prompt(texto_activo), language=None, wrap_lines=True)
+
+        with st.expander(
+            f"🔑 Ver clave oficial de los {len(bench_obj.errores)} errores ocultos en este texto (ground truth)",
+            expanded=False,
+        ):
+            rows_gt = [
+                {
+                    "Orden": e.orden,
+                    "Dificultad": "🟢 Claro" if e.categoria.lower() == "claro" else "🟣 Sutil",
+                    "Fenómeno": e.fenomeno,
+                    "Error en el texto": e.fragmento_erroneo,
+                    "Corrección normativa": e.correccion_esperada,
+                }
+                for e in bench_obj.errores
+            ]
+            st.dataframe(pd.DataFrame(rows_gt), use_container_width=True, hide_index=True)
     else:
-        errores_plantados = None
-        up_col, txt_col = st.columns([1, 2])
+        up_col, gt_col = st.columns(2)
         with up_col:
             uploaded_file = st.file_uploader(
-                "Sube un archivo .txt con tu texto:",
+                "Sube un archivo .txt con tu texto con errores (opcional):",
                 type=["txt"],
             )
             default_custom_text = ""
@@ -297,20 +341,28 @@ def render_error_benchmark_selector() -> tuple[str, tuple[PlantedError, ...] | N
                     default_custom_text = raw_bytes.decode("utf-8")
                 except UnicodeDecodeError:
                     default_custom_text = raw_bytes.decode("latin-1", errors="ignore")
-        with txt_col:
+
             texto_activo = st.text_area(
-                "O pega / edita aquí tu propio texto con errores:",
+                "Texto con errores a evaluar:",
                 value=default_custom_text,
-                height=160,
-                placeholder="Pega aquí el texto que quieras que los modelos corrijan...",
+                height=180,
+                placeholder="Pega aquí tu propio texto con errores...",
             )
+        with gt_col:
+            raw_custom_gt = st.text_area(
+                "Clave de errores esperados en tu texto (1 por línea: `Claro | error -> corrección` o `Sutil | error -> corrección`):",
+                value="Claro | atravez -> a través\nSutil | pensaban de que -> pensaban que",
+                height=250,
+                help="Para que el benchmark pueda calificar automáticamente sin usar otro LLM como juez, indica aquí los errores que plantaste en tu texto.",
+            )
+            errores_plantados = parse_custom_ground_truth_errors(raw_custom_gt)
 
         with st.expander("📋 Prompt 4: búsqueda estructurada de errores (con tu texto propio)", expanded=True):
             if texto_activo.strip():
                 st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
                 st.code(build_error_detection_prompt(texto_activo), language=None, wrap_lines=True)
             else:
-                st.info("Sube o pega un texto arriba para generar automáticamente el prompt estructurado.")
+                st.info("Sube o pega tu texto arriba para generar automáticamente el prompt estructurado.")
 
     return texto_activo, errores_plantados
 
@@ -378,8 +430,7 @@ def render_error_detection_comparison(res_a: ModelAuditResult, res_b: ModelAudit
             )
         st.dataframe(pd.DataFrame(rows_err), use_container_width=True, hide_index=True)
 
-    # Mostrar las listas estructuradas parseadas de cada modelo lado a lado
-    with st.expander("📋 Ver lista estructurada de correcciones extraída de cada modelo", expanded=not er_a.tiene_ground_truth):
+    with st.expander("📋 Ver tabla de ítems extraídos de la respuesta de cada modelo", expanded=False):
         c_left, c_right = st.columns(2)
         with c_left:
             st.markdown(f"**{res_a.modelo}** ({len(er_a.items_extraidos)} ítems listados)")
