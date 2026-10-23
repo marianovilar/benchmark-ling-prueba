@@ -228,8 +228,37 @@ def clear_texts() -> None:
 # ============================================================================
 
 
+def render_about_tab() -> None:
+    """Renderiza la pestaña explicativa sobre el funcionamiento metodológico y créditos del sitio."""
+    st.subheader("ℹ️ Cómo funciona este sitio")
+    st.markdown(
+        """
+        Este sitio fue armado por **Mariano Vilar** con propósitos pedagógicos utilizando la **IA de Google**.
+        Su objetivo es ofrecer un entorno experimental transparente para analizar y comparar el desempeño lingüístico,
+        gramatical y estilístico de distintos modelos de lenguaje (LLMs) en español.
+
+        ---
+
+        ### 1. Evaluación determinista en Python (sin otro LLM como juez)
+        A diferencia de otros benchmarks que emplean un modelo de lenguaje para calificar las respuestas de otro (*LLM-as-a-judge*), **todas las evaluaciones de esta plataforma se ejecutan exclusivamente mediante código Python determinista y auditable**:
+        * **Prueba 1 (test metalingüístico de opción múltiple):** compara de forma estricta las respuestas emitidas por cada modelo (`A`, `B`, `C` o `D`) contra una clave fija (*ground truth*) basada en la *Nueva gramática de la lengua española* (RAE / ASALE).
+        * **Prueba 2 (auditoría estilística en prosa):** contabiliza y normaliza cada 500 palabras la densidad de dos tics sintáctico-retóricos frecuentes en textos generados por IA:
+          1. *Reframing asindético y adversativo* (*«No es X, es Y»*, *«No se trata de X, se trata de Y»*, *«No era solo X, sino Y»*), detectado mediante expresiones regulares en Python.
+          2. *Yuxtaposición explicativo-desarrolladora con dos puntos* (`[Oración con verbo] : [Oración completa con verbo conjugado]`), detectada mediante segmentación oracional y etiquetado morfosintáctico (*POS-tagging*) con la biblioteca **`spaCy` (`es_core_news_lg`)**, descartando listas y aposiciones nominales.
+        * **Prueba 3 (detección y corrección de errores en textos largos):** verifica mediante reglas de coincidencia en Python cuántos de los errores plantados en el texto de referencia (tanto errores **claros** de ortografía/concordancia como errores **sutiles** de puntuación, queísmo, dequeísmo, quesuismo, gerundios e impropiedades léxicas) fueron efectivamente identificados por cada modelo.
+
+        ---
+
+        ### 2. Uso manual desde el navegador o la PC
+        En su versión actual, **este sitio no se conecta automáticamente por API con los modelos de lenguaje**. Para realizar una prueba comparativa, el flujo de trabajo requiere que el usuario:
+        1. Seleccione las pruebas que desea realizar y **copie los prompts correspondientes** desde las ventanas desplegables de esta página.
+        2. **Acceda manualmente en su navegador web o en su PC** a los sitios o plataformas de los modelos que desee poner a prueba (por ejemplo, ChatGPT, Claude, Gemini, o plataformas gratuitas con modelos abiertos y pequeños como LMArena, Duck.ai, HuggingChat, Mistral, Qwen o DeepSeek).
+        3. **Pegue las respuestas** generadas por cada uno de los dos modelos en las cajas de texto de esta interfaz y presione **«▶️ Ejecutar evaluación y comparar modelos»**.
+        """
+    )
+
+
 def render_header_and_prompts() -> None:
-    st.title("📐 Benchmark en vivo: evaluación metalingüística y estilometría de LLMs")
     st.markdown(
         "Compara dos modelos de lenguaje en español pegando sus respuestas lado a lado. "
         "Puedes activar o desactivar libremente cualquiera de las **tres pruebas** según el objetivo de la clase."
@@ -545,8 +574,7 @@ def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = T
             st.caption(f"Verbos detectados tras `:` ({len(match.verbos_detectados_der)}): {verbos_badge}")
 
 
-def main() -> None:
-    init_session_state()
+def render_evaluator_tab() -> None:
     render_header_and_prompts()
 
     # ========================================================================
@@ -802,6 +830,19 @@ def main() -> None:
             mime="text/plain",
             use_container_width=True,
         )
+
+
+def main() -> None:
+    init_session_state()
+    st.title("📐 Benchmark en vivo: evaluación metalingüística y estilometría de LLMs")
+
+    tab_evaluador, tab_como_funciona = st.tabs(
+        ["🚀 Evaluador interactivo", "ℹ️ Cómo funciona este sitio"]
+    )
+    with tab_evaluador:
+        render_evaluator_tab()
+    with tab_como_funciona:
+        render_about_tab()
 
 
 if __name__ == "__main__":
