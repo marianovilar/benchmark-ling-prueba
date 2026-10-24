@@ -323,13 +323,13 @@ def render_header_and_prompts() -> None:
                 Además de los modelos comerciales conocidos (ChatGPT, Gemini, Claude), puedes usar estos sitios **gratuitos** para probar modelos abiertos, regionales, pequeños (7B–9B) o menos conocidos:
 
                 * 🌎 **[CopuChat — LatamGPT](https://copuchat.latamgpt.org/)** — Chat público del proyecto abierto latinoamericano *Latam-GPT* (impulsado por CENIA), ideal para evaluar un modelo entrenado con foco en el español de América Latina.
+                * 🧪 **[Ai2 Playground — AllenAI](https://playground.allenai.org/)** *(Recomendado)* — Plataforma abierta y sin registro del Allen Institute for AI; permite probar modelos académicos 100 % abiertos (`OLMo 2`, `Llama-Tülu 3`, `Molmo`) de distintos tamaños (7B, 13B, 32B, 70B), ideales para contrastar fallos gramaticales en español.
                 * 🏟️ **[LMArena (Chatbot Arena)](https://lmarena.ai/)** *(Recomendado)* — Usa la pestaña *Side-by-Side* o *Direct Chat* para probar gratis y sin cuenta docenas de modelos grandes y pequeños (`Llama`, `Gemma`, `Qwen`, `Mistral`, `Command-R`, `Phi`, `Yi`, etc.).
                 * 🦆 **[Duck.ai (DuckDuckGo AI Chat)](https://duck.ai/)** — Gratis y sin registro. Permite alternar entre modelos ligeros (`Mistral Small`, `Llama 3`, `Claude Haiku`, `GPT-4o mini`).
-                * 🧪 **[AllenAI Playground (OLMo)](https://playground.allenai.org/)** — Modelos académicos *open-source* pequeños (`OLMo 7B / 13B / 32B`), ideales para contrastar fallos gramaticales frente a modelos gigantes.
-                * 🤗 **[HuggingChat](https://huggingface.co/chat/)** — Acceso gratuito a modelos abiertos variados (`Qwen`, `Cohere Command R`, `Llama`, `SmolLM`).
                 * 🇫🇷 **[Le Chat — Mistral AI](https://chat.mistral.ai/)** — Modelo europeo gratuito en el navegador.
                 * 🐉 **[Qwen Chat (Alibaba)](https://chat.qwen.ai/)** — Permite elegir distintas variantes de tamaño de la familia `Qwen` gratis.
                 * 🐋 **[DeepSeek Chat](https://chat.deepseek.com/)** — Modelo gratuito alternativo útil para comparar tics retóricos en español.
+                * 🤗 **[HuggingChat](https://huggingface.co/chat/)** — Acceso a modelos abiertos variados (`Qwen`, `Cohere Command R`, `Llama`, `SmolLM`), aunque requiere iniciar sesión y tiene un límite gratuito muy restringido.
                 """
             )
 
