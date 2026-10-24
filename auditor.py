@@ -844,20 +844,45 @@ def evaluate_error_detection(
 # ============================================================================
 
 
-def build_custom_test_prompt(specs: list[CustomQuestionSpec]) -> str:
+def _normalize_option_letters(raw_val: object) -> str:
+    """
+    Extrae las letras de opción válidas (A, B, C, D) de una cadena o lista,
+    las ordena alfabéticamente sin duplicados y las une con ', ' (ej.: 'A' o 'A, C').
+    """
+    if isinstance(raw_val, (list, tuple, set)):
+        combined = " ".join(str(x) for x in raw_val)
+    else:
+        combined = str(raw_val or "")
+    letters = sorted({m.upper() for m in re.findall(r"\b([A-Da-d])\b", combined)})
+    return ", ".join(letters)
+
+
+def build_custom_test_prompt(specs: list[CustomQuestionSpec] | tuple[CustomQuestionSpec, ...]) -> str:
     """
     Construye automáticamente el prompt estructurado para la Prueba 4 creada en clase,
-    según los ítems definidos por el docente y los estudiantes.
+    según los ítems definidos por el docente y los estudiantes (soporta 1 o varias opciones correctas).
     """
     if not specs:
         return ""
 
     modo = specs[0].modo
     if modo == "multiple_choice":
+        has_multi_answer = any(
+            len(re.findall(r"\b[A-Da-d]\b", s.respuesta_correcta)) > 1 for s in specs
+        )
         keys_example = ", ".join(f'"{s.id}": "..."' for s in specs)
+        if has_multi_answer:
+            header_instruction = (
+                f"Responde únicamente en formato JSON {{{keys_example}}} indicando la opción o las opciones "
+                'válidas para cada ítem (si un ítem tiene más de una opción válida, indícalas separadas por coma, por ejemplo "A, C"):'
+            )
+        else:
+            header_instruction = (
+                f"Responde únicamente en formato JSON {{{keys_example}}} seleccionando la opción "
+                "gramaticalmente normativa o correcta para cada ítem:"
+            )
         lines = [
-            f"Responde únicamente en formato JSON {{{keys_example}}} seleccionando la opción "
-            "gramaticalmente normativa o correcta para cada ítem:",
+            header_instruction,
             "",
         ]
         for s in specs:
@@ -879,7 +904,10 @@ def build_custom_test_prompt(specs: list[CustomQuestionSpec]) -> str:
 
 
 def _parse_custom_choice_input(raw_input: str, num_questions: int) -> dict[str, str]:
-    """Extrae respuestas A/B/C/D para cualquier cantidad de preguntas (q1..qN)."""
+    """
+    Extrae respuestas A/B/C/D (simples o múltiples, ej. 'A' o 'A, C')
+    para cualquier cantidad de preguntas (q1..qN).
+    """
     if not raw_input or not raw_input.strip():
         return {}
     text = raw_input.strip()
@@ -890,9 +918,9 @@ def _parse_custom_choice_input(raw_input: str, num_questions: int) -> dict[str, 
             parsed = json.loads(json_match.group(0))
             if isinstance(parsed, dict):
                 return {
-                    str(k).strip().lower(): str(v).strip().upper()
+                    str(k).strip().lower(): _normalize_option_letters(v)
                     for k, v in parsed.items()
-                    if v is not None
+                    if v is not None and _normalize_option_letters(v)
                 }
         except json.JSONDecodeError:
             pass
@@ -900,30 +928,38 @@ def _parse_custom_choice_input(raw_input: str, num_questions: int) -> dict[str, 
     extracted: dict[str, str] = {}
     for idx in range(1, num_questions + 1):
         pattern = re.compile(
-            rf"(?:q|pregunta\s*)?0?{idx}\s*[\)\.\:\-\=]?\s*[\"']?([A-Da-d])\b",
+            rf"(?:^|\n)\s*(?:q|pregunta\s*)?0?{idx}\s*[\)\.\:\-\=]\s*([^\n]+)",
             re.IGNORECASE,
         )
         m = pattern.search(text)
         if m:
-            extracted[f"q{idx}"] = m.group(1).upper()
+            norm_letters = _normalize_option_letters(m.group(1))
+            if norm_letters:
+                extracted[f"q{idx}"] = norm_letters
 
     if extracted:
         return extracted
 
-    letters = re.findall(r"\b([A-Da-d])\b", text)
+    if num_questions == 1:
+        norm_all = _normalize_option_letters(text)
+        if norm_all:
+            return {"q1": norm_all}
+
+    letters = [m.upper() for m in re.findall(r"\b([A-Da-d])\b", text)]
     if len(letters) == num_questions:
-        return {f"q{i+1}": letters[i].upper() for i in range(num_questions)}
+        return {f"q{i+1}": letters[i] for i in range(num_questions)}
 
     return {}
 
 
 def evaluate_custom_test(
     raw_response: str,
-    specs: list[CustomQuestionSpec] | None,
+    specs: list[CustomQuestionSpec] | tuple[CustomQuestionSpec, ...] | None,
 ) -> CustomTestResult:
     """
     Evalúa de forma determinista las respuestas de un modelo en la Prueba 4 creada en clase.
-    Soporta tanto opción múltiple ('multiple_choice') como coincidencia de expresión clave ('frase_clave').
+    Soporta opción múltiple con una o varias respuestas correctas ('multiple_choice')
+    y coincidencia de expresión clave ('frase_clave').
     """
     if not specs:
         return CustomTestResult(evaluado=False)
@@ -936,8 +972,8 @@ def evaluate_custom_test(
     if modo == "multiple_choice":
         parsed_ans = _parse_custom_choice_input(raw_response, total_q)
         for s in specs:
-            expected = s.respuesta_correcta.strip().upper()
-            actual = parsed_ans.get(s.id.lower(), "")
+            expected = _normalize_option_letters(s.respuesta_correcta)
+            actual = _normalize_option_letters(parsed_ans.get(s.id.lower(), ""))
             is_ok = bool(expected) and (actual == expected)
             if is_ok:
                 score += 1
@@ -946,7 +982,7 @@ def evaluate_custom_test(
                     question_id=s.id.upper(),
                     fenomeno=s.fenomeno,
                     enunciado=s.enunciado,
-                    respuesta_esperada=expected,
+                    respuesta_esperada=expected if expected else "(Sin definir)",
                     respuesta_modelo=actual if actual else "(Vacío)",
                     es_correcta=is_ok,
                 )
@@ -956,10 +992,14 @@ def evaluate_custom_test(
         raw_lines = [line.strip() for line in (raw_response or "").strip().splitlines() if line.strip()]
         for idx, s in enumerate(specs):
             expected_raw = s.respuesta_correcta.strip()
-            expected_norm = normalize_error_text(expected_raw)
+            alternativas = [
+                normalize_error_text(alt)
+                for alt in re.split(r"[;|]", expected_raw)
+                if normalize_error_text(alt)
+            ]
             model_line = raw_lines[idx] if idx < len(raw_lines) else (raw_response or "").strip()
             model_norm = normalize_error_text(model_line)
-            is_ok = bool(expected_norm) and (expected_norm in model_norm)
+            is_ok = bool(alternativas) and any(alt in model_norm for alt in alternativas)
             if is_ok:
                 score += 1
             detalles.append(

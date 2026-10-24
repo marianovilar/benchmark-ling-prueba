@@ -224,8 +224,8 @@ def init_session_state() -> None:
         st.session_state["p4_q1_c"] = "Pienso de que la hipótesis es correcta."
     if "p4_q1_d" not in st.session_state:
         st.session_state["p4_q1_d"] = "A y B son igualmente válidas en el registro formal."
-    if "p4_q1_corr" not in st.session_state:
-        st.session_state["p4_q1_corr"] = "A"
+    if "p4_q1_corr" not in st.session_state or isinstance(st.session_state.get("p4_q1_corr"), str):
+        st.session_state["p4_q1_corr"] = ["A"]
     if "p4_q1_frase" not in st.session_state:
         st.session_state["p4_q1_frase"] = "Me alegro de que hayas aprobado"
 
@@ -750,10 +750,15 @@ def render_custom_test_builder() -> tuple[CustomQuestionSpec, ...]:
 
             if modalidad_code == "multiple_choice":
                 with c_corr:
-                    letra_correcta = st.selectbox(
-                        f"Opción correcta (Q{i}):",
+                    corr_key = f"p4_q{i}_corr"
+                    if corr_key not in st.session_state or isinstance(st.session_state.get(corr_key), str):
+                        prev = st.session_state.get(corr_key, "A")
+                        st.session_state[corr_key] = [prev] if prev in ("A", "B", "C", "D") else ["A"]
+                    letras_correctas = st.multiselect(
+                        f"Opción(es) correcta(s) (Q{i}):",
                         options=["A", "B", "C", "D"],
-                        key=f"p4_q{i}_corr",
+                        key=corr_key,
+                        help="Puedes elegir una sola letra (ej. A) o más de una (ej. A y C) si la consigna pide marcar cuáles son válidas.",
                     )
                 op_col1, op_col2 = st.columns(2)
                 with op_col1:
@@ -767,7 +772,7 @@ def render_custom_test_builder() -> tuple[CustomQuestionSpec, ...]:
                     CustomQuestionSpec(
                         id=f"q{i}",
                         fenomeno=fenomeno.strip() or f"Pregunta {i}",
-                        enunciado=enunciado.strip() or f"Seleccione la opción correcta para la pregunta {i}:",
+                        enunciado=enunciado.strip() or f"Seleccione la opción o las opciones válidas para la pregunta {i}:",
                         modo="multiple_choice",
                         opciones={
                             "A": op_a.strip() or "Opción A",
@@ -775,7 +780,7 @@ def render_custom_test_builder() -> tuple[CustomQuestionSpec, ...]:
                             "C": op_c.strip() or "Opción C",
                             "D": op_d.strip() or "Opción D",
                         },
-                        respuesta_correcta=letra_correcta,
+                        respuesta_correcta=", ".join(sorted(letras_correctas)),
                     )
                 )
             else:
