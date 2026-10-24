@@ -47,14 +47,14 @@ GROUND_TRUTH_META: Final[dict[str, dict[str, Any]]] = {
     "q1": {
         "pregunta": "Concordancia con colectivos partitivos",
         "enunciado": (
-            "¿Cuál de las siguientes oraciones presenta una concordancia ad sensum o "
-            "gramaticalmente normada en construcciones partitivas con atributo?"
+            "¿Cuál de las siguientes oraciones presenta una concordancia gramaticalmente "
+            "normativa en construcciones partitivas con atributo o predicativo?"
         ),
         "opciones": {
-            "A": "La mayoría de los asistentes quedaron sumamente cansados tras la jornada.",
-            "B": "Un grupo de investigadores publicaron ayer los resultados, aunque la mayoría permaneció cautelosa.",
+            "A": "La mayoría de los asistentes quedó sumamente cansados tras la jornada.",
+            "B": "Un grupo de investigadores quedaron muy satisfechos con los resultados obtenidos.",
             "C": "La mitad de los libros fue trasladados al depósito central.",
-            "D": "Resto de los participantes decidieron abandonar la sala.",
+            "D": "El resto de los participantes permaneció callados durante toda la sesión.",
         },
         "respuesta_correcta": "B",
     },
