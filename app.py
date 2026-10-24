@@ -284,8 +284,9 @@ def render_header_and_prompts() -> None:
         with st.expander("🌐 Modelos gratuitos y alternativos para probar en clase", expanded=False):
             st.markdown(
                 """
-                Además de los modelos comerciales conocidos (ChatGPT, Gemini, Claude), puedes usar estos sitios **gratuitos** para probar modelos abiertos, pequeños (7B–9B) o menos conocidos:
+                Además de los modelos comerciales conocidos (ChatGPT, Gemini, Claude), puedes usar estos sitios **gratuitos** para probar modelos abiertos, regionales, pequeños (7B–9B) o menos conocidos:
 
+                * 🌎 **[CopuChat — LatamGPT](https://copuchat.latamgpt.org/)** — Chat público del proyecto abierto latinoamericano *Latam-GPT* (impulsado por CENIA), ideal para evaluar un modelo entrenado con foco en el español de América Latina.
                 * 🏟️ **[LMArena (Chatbot Arena)](https://lmarena.ai/)** *(Recomendado)* — Usa la pestaña *Side-by-Side* o *Direct Chat* para probar gratis y sin cuenta docenas de modelos grandes y pequeños (`Llama`, `Gemma`, `Qwen`, `Mistral`, `Command-R`, `Phi`, `Yi`, etc.).
                 * 🦆 **[Duck.ai (DuckDuckGo AI Chat)](https://duck.ai/)** — Gratis y sin registro. Permite alternar entre modelos ligeros (`Mistral Small`, `Llama 3`, `Claude Haiku`, `GPT-4o mini`).
                 * 🧪 **[AllenAI Playground (OLMo)](https://playground.allenai.org/)** — Modelos académicos *open-source* pequeños (`OLMo 7B / 13B / 32B`), ideales para contrastar fallos gramaticales frente a modelos gigantes.
