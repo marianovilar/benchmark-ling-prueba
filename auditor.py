@@ -257,6 +257,41 @@ class ErrorDetectionResult:
 
 
 @dataclass(frozen=True)
+class CustomQuestionSpec:
+    """Especificación de un ítem creado en vivo durante la clase para la Prueba 4."""
+
+    id: str  # "q1", "q2", ...
+    fenomeno: str
+    enunciado: str
+    modo: str  # "multiple_choice" | "frase_clave"
+    opciones: dict[str, str] = field(default_factory=dict)  # Solo para multiple_choice
+    respuesta_correcta: str = ""  # Letra ("A"-"D") o expresión clave esperada
+
+
+@dataclass(frozen=True)
+class CustomQuestionDetail:
+    """Resultado individual por ítem de la Prueba 4 creada en clase."""
+
+    question_id: str
+    fenomeno: str
+    enunciado: str
+    respuesta_esperada: str
+    respuesta_modelo: str
+    es_correcta: bool
+
+
+@dataclass(frozen=True)
+class CustomTestResult:
+    """Resultado consolidado de la Prueba 4 creada en vivo."""
+
+    evaluado: bool = False
+    puntaje_absoluto: int = 0
+    total_preguntas: int = 0
+    precision_porcentaje: float = 0.0
+    detalles: list[CustomQuestionDetail] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class ModelAuditResult:
     """Resultado integral de auditoría en memoria para un modelo."""
 
@@ -269,6 +304,7 @@ class ModelAuditResult:
     dos_puntos_matches: list[ColonClauseMatch]
     densidad_dos_puntos_500w: float
     errores_result: ErrorDetectionResult = field(default_factory=ErrorDetectionResult)
+    custom_result: CustomTestResult = field(default_factory=CustomTestResult)
 
     @property
     def total_reframing(self) -> int:
@@ -283,6 +319,7 @@ class ModelAuditResult:
         include_meta: bool = True,
         include_style: bool = True,
         include_errors: bool = False,
+        include_custom: bool = False,
     ) -> dict[str, Any]:
         """Convierte el resultado al esquema dinámico según las pruebas activas."""
         row: dict[str, Any] = {"Modelo": self.modelo}
@@ -310,6 +347,11 @@ class ModelAuditResult:
                 )
                 row["Ítems sin correspondencia"] = len(self.errores_result.items_sin_correspondencia)
             row["Ítems reportados por el modelo"] = len(self.errores_result.items_extraidos)
+        if include_custom and self.custom_result.evaluado:
+            row["Puntaje prueba 4"] = (
+                f"{self.custom_result.puntaje_absoluto} / {self.custom_result.total_preguntas}"
+            )
+            row["Precisión prueba 4 (%)"] = round(self.custom_result.precision_porcentaje, 1)
         return row
 
 
@@ -798,7 +840,151 @@ def evaluate_error_detection(
 
 
 # ============================================================================
-# PIPELINE EN MEMORIA CON ACTIVACIÓN INDEPENDIENTE DE LAS 3 PRUEBAS
+# MÓDULO F: PRUEBA 4 (CONSTRUCTOR DE PRUEBA EN VIVO CON LA CLASE)
+# ============================================================================
+
+
+def build_custom_test_prompt(specs: list[CustomQuestionSpec]) -> str:
+    """
+    Construye automáticamente el prompt estructurado para la Prueba 4 creada en clase,
+    según los ítems definidos por el docente y los estudiantes.
+    """
+    if not specs:
+        return ""
+
+    modo = specs[0].modo
+    if modo == "multiple_choice":
+        keys_example = ", ".join(f'"{s.id}": "..."' for s in specs)
+        lines = [
+            f"Responde únicamente en formato JSON {{{keys_example}}} seleccionando la opción "
+            "gramaticalmente normativa o correcta para cada ítem:",
+            "",
+        ]
+        for s in specs:
+            lines.append(f"{s.id.upper()} ({s.fenomeno}): {s.enunciado}")
+            for opt_k, opt_v in s.opciones.items():
+                lines.append(f"  {opt_k}) {opt_v}")
+            lines.append("")
+        return "\n".join(lines).strip()
+
+    # Modo "frase_clave" (respuesta breve / reescritura)
+    lines = [
+        "Resuelve los siguientes ítems lingüísticos respondiendo en una lista numerada "
+        "(1., 2., etc.), una respuesta por línea:",
+        "",
+    ]
+    for idx, s in enumerate(specs, start=1):
+        lines.append(f"{idx}. ({s.fenomeno}) {s.enunciado}")
+    return "\n".join(lines).strip()
+
+
+def _parse_custom_choice_input(raw_input: str, num_questions: int) -> dict[str, str]:
+    """Extrae respuestas A/B/C/D para cualquier cantidad de preguntas (q1..qN)."""
+    if not raw_input or not raw_input.strip():
+        return {}
+    text = raw_input.strip()
+
+    json_match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            if isinstance(parsed, dict):
+                return {
+                    str(k).strip().lower(): str(v).strip().upper()
+                    for k, v in parsed.items()
+                    if v is not None
+                }
+        except json.JSONDecodeError:
+            pass
+
+    extracted: dict[str, str] = {}
+    for idx in range(1, num_questions + 1):
+        pattern = re.compile(
+            rf"(?:q|pregunta\s*)?0?{idx}\s*[\)\.\:\-\=]?\s*[\"']?([A-Da-d])\b",
+            re.IGNORECASE,
+        )
+        m = pattern.search(text)
+        if m:
+            extracted[f"q{idx}"] = m.group(1).upper()
+
+    if extracted:
+        return extracted
+
+    letters = re.findall(r"\b([A-Da-d])\b", text)
+    if len(letters) == num_questions:
+        return {f"q{i+1}": letters[i].upper() for i in range(num_questions)}
+
+    return {}
+
+
+def evaluate_custom_test(
+    raw_response: str,
+    specs: list[CustomQuestionSpec] | None,
+) -> CustomTestResult:
+    """
+    Evalúa de forma determinista las respuestas de un modelo en la Prueba 4 creada en clase.
+    Soporta tanto opción múltiple ('multiple_choice') como coincidencia de expresión clave ('frase_clave').
+    """
+    if not specs:
+        return CustomTestResult(evaluado=False)
+
+    total_q = len(specs)
+    modo = specs[0].modo
+    detalles: list[CustomQuestionDetail] = []
+    score = 0
+
+    if modo == "multiple_choice":
+        parsed_ans = _parse_custom_choice_input(raw_response, total_q)
+        for s in specs:
+            expected = s.respuesta_correcta.strip().upper()
+            actual = parsed_ans.get(s.id.lower(), "")
+            is_ok = bool(expected) and (actual == expected)
+            if is_ok:
+                score += 1
+            detalles.append(
+                CustomQuestionDetail(
+                    question_id=s.id.upper(),
+                    fenomeno=s.fenomeno,
+                    enunciado=s.enunciado,
+                    respuesta_esperada=expected,
+                    respuesta_modelo=actual if actual else "(Vacío)",
+                    es_correcta=is_ok,
+                )
+            )
+    else:
+        # Modo "frase_clave": verifica línea por línea (o por número de ítem) si contiene la expresión esperada
+        raw_lines = [line.strip() for line in (raw_response or "").strip().splitlines() if line.strip()]
+        for idx, s in enumerate(specs):
+            expected_raw = s.respuesta_correcta.strip()
+            expected_norm = normalize_error_text(expected_raw)
+            model_line = raw_lines[idx] if idx < len(raw_lines) else (raw_response or "").strip()
+            model_norm = normalize_error_text(model_line)
+            is_ok = bool(expected_norm) and (expected_norm in model_norm)
+            if is_ok:
+                score += 1
+            detalles.append(
+                CustomQuestionDetail(
+                    question_id=s.id.upper(),
+                    fenomeno=s.fenomeno,
+                    enunciado=s.enunciado,
+                    respuesta_esperada=expected_raw,
+                    respuesta_modelo=model_line if model_line else "(Vacío)",
+                    es_correcta=is_ok,
+                )
+            )
+
+    precision = (score / total_q) * 100.0 if total_q > 0 else 0.0
+    return CustomTestResult(
+        evaluado=True,
+        puntaje_absoluto=score,
+        total_preguntas=total_q,
+        precision_porcentaje=precision,
+        detalles=detalles,
+    )
+
+
+# ============================================================================
+# PIPELINE EN MEMORIA CON ACTIVACIÓN INDEPENDIENTE DE LAS 4 PRUEBAS
 # ============================================================================
 
 
@@ -809,12 +995,15 @@ def audit_text_in_memory(
     meta_answers: str | dict[str, str] | None = None,
     error_response: str = "",
     planted_errors: tuple[PlantedError, ...] | None = None,
+    custom_response: str = "",
+    custom_specs: list[CustomQuestionSpec] | None = None,
     run_meta: bool = True,
     run_style: bool = True,
     run_errors: bool = False,
+    run_custom: bool = False,
 ) -> ModelAuditResult:
     """
-    Ejecuta las pruebas seleccionadas (`run_meta`, `run_style`, `run_errors`) en memoria.
+    Ejecuta las pruebas seleccionadas (`run_meta`, `run_style`, `run_errors`, `run_custom`) en memoria.
     """
     meta_result = (
         evaluate_metalinguistic_answers(meta_answers)
@@ -826,6 +1015,12 @@ def audit_text_in_memory(
         evaluate_error_detection(error_response, planted_errors)
         if run_errors
         else ErrorDetectionResult()
+    )
+
+    custom_res = (
+        evaluate_custom_test(custom_response, custom_specs)
+        if run_custom
+        else CustomTestResult()
     )
 
     cleaned_text = raw_text.strip()
@@ -840,6 +1035,7 @@ def audit_text_in_memory(
             dos_puntos_matches=[],
             densidad_dos_puntos_500w=0.0,
             errores_result=errores_res,
+            custom_result=custom_res,
         )
 
     doc = nlp(cleaned_text)
@@ -861,35 +1057,47 @@ def audit_text_in_memory(
         dos_puntos_matches=colon_matches,
         densidad_dos_puntos_500w=densidad_dos_puntos,
         errores_result=errores_res,
+        custom_result=custom_res,
     )
 
 
 def compare_models_in_memory(
-    models_inputs: list[tuple[str, str, str | dict[str, str] | None, str]],
+    models_inputs: list[tuple[str, ...]],
     nlp: Language | None,
     planted_errors: tuple[PlantedError, ...] | None = None,
+    custom_specs: list[CustomQuestionSpec] | None = None,
     run_meta: bool = True,
     run_style: bool = True,
     run_errors: bool = False,
+    run_custom: bool = False,
 ) -> tuple[pd.DataFrame, list[ModelAuditResult]]:
     """
-    Recibe una lista de tuplas `(nombre_modelo, texto_ensayo, respuestas_meta, respuestas_errores)`
+    Recibe una lista de tuplas `(nombre_modelo, texto_ensayo, respuestas_meta, respuestas_errores[, respuestas_custom])`
     y devuelve el DataFrame comparativo adaptado a las pruebas activas y la lista de resultados.
     """
-    results: list[ModelAuditResult] = [
-        audit_text_in_memory(
-            name,
-            text,
-            nlp,
-            meta,
-            error_response=err_resp,
-            planted_errors=planted_errors,
-            run_meta=run_meta,
-            run_style=run_style,
-            run_errors=run_errors,
+    results: list[ModelAuditResult] = []
+    for entry in models_inputs:
+        name = entry[0]
+        text = entry[1] if len(entry) > 1 else ""
+        meta = entry[2] if len(entry) > 2 else None
+        err_resp = entry[3] if len(entry) > 3 else ""
+        cust_resp = entry[4] if len(entry) > 4 else ""
+        results.append(
+            audit_text_in_memory(
+                name,
+                text,
+                nlp,
+                meta,
+                error_response=err_resp,
+                planted_errors=planted_errors,
+                custom_response=cust_resp,
+                custom_specs=custom_specs,
+                run_meta=run_meta,
+                run_style=run_style,
+                run_errors=run_errors,
+                run_custom=run_custom,
+            )
         )
-        for name, text, meta, err_resp in models_inputs
-    ]
 
     df_summary = pd.DataFrame(
         [
@@ -897,6 +1105,7 @@ def compare_models_in_memory(
                 include_meta=run_meta,
                 include_style=run_style,
                 include_errors=run_errors,
+                include_custom=run_custom,
             )
             for r in results
         ]
@@ -910,6 +1119,7 @@ def format_detailed_audit_log(
     run_meta: bool = True,
     run_style: bool = True,
     run_errors: bool = False,
+    run_custom: bool = False,
 ) -> str:
     """Genera un informe detallado en texto plano según las pruebas activadas."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -977,6 +1187,20 @@ def format_detailed_audit_log(
                 lines.append(f"[PRUEBA 3 - DETECCIÓN DE ERRORES (TEXTO PROPIO)]: {len(er.items_extraidos)} ítems reportados")
                 for item in er.items_extraidos:
                     lines.append(f"  {item.numero}. {item.error_identificado} -> {item.correccion_propuesta}")
+            lines.append("")
+
+        if run_custom and res.custom_result.evaluado:
+            cr = res.custom_result
+            lines.append(
+                f"[PRUEBA 4 - PRUEBA CREADA EN CLASE]: "
+                f"{cr.puntaje_absoluto}/{cr.total_preguntas} ({cr.precision_porcentaje:.1f}%)"
+            )
+            for det_c in cr.detalles:
+                est_c = "CORRECTO" if det_c.es_correcta else "INCORRECTO"
+                lines.append(
+                    f"  - {det_c.question_id} ({det_c.fenomeno}): "
+                    f"Modelo='{det_c.respuesta_modelo}' | Clave='{det_c.respuesta_esperada}' -> [{est_c}]"
+                )
             lines.append("")
 
     return "\n".join(lines)
