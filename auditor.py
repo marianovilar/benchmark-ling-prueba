@@ -6,7 +6,7 @@ Permite activar o desactivar de forma independiente las pruebas:
 - Prueba 2 (Módulos B, C y D): auditoría estilística en prosa (reframing asindético/adversativo y
   dos puntos oracionales con spaCy, normalizados cada 500 palabras).
 - Prueba 3 (Módulo E): detección y corrección de errores de redacción y ortografía (sobre los 3 textos
-  extensos de ~1000 palabras con errores claros y sutiles, o sobre un texto propio subido por el usuario).
+  extensos de ~1000 palabras con errores claros y sutiles, o sobre un texto propio con su clave).
 """
 
 from __future__ import annotations
@@ -18,13 +18,19 @@ import re
 import subprocess
 import sys
 from typing import Any, Final, Pattern
+import unicodedata
 
 import pandas as pd
 import spacy
 from spacy.language import Language
 from spacy.tokens import Doc, Span
 
-from textos_errores import PlantedError
+from textos_errores import (
+    TEXTO_1_CONTENIDO,
+    TEXTO_2_CONTENIDO,
+    TEXTO_3_CONTENIDO,
+    PlantedError,
+)
 
 # ============================================================================
 # CONSTANTES Y PATRONES PRECOMPILADOS
@@ -219,6 +225,7 @@ class ParsedErrorCorrection:
     correccion_propuesta: str
     explicacion: str
     linea_original: str
+    tiene_flecha: bool = True
 
 
 @dataclass(frozen=True)
@@ -235,15 +242,18 @@ class ErrorDetectionResult:
     """Resultado consolidado del Módulo E (Detección y Corrección de Errores)."""
 
     items_extraidos: list[ParsedErrorCorrection] = field(default_factory=list)
+    items_sin_correspondencia: list[ParsedErrorCorrection] = field(default_factory=list)
     tiene_ground_truth: bool = False
     total_plantados: int = 0
     detectados_total: int = 0
-    precision_porcentaje: float = 0.0
+    cobertura_porcentaje: float = 0.0
+    precision_aprox_porcentaje: float = 0.0
     claros_total: int = 0
     claros_detectados: int = 0
     sutiles_total: int = 0
     sutiles_detectados: int = 0
     detalles_plantados: list[PlantedErrorMatchDetail] = field(default_factory=list)
+    aviso_formato: bool = False
 
 
 @dataclass(frozen=True)
@@ -290,13 +300,15 @@ class ModelAuditResult:
                 row["Errores detectados"] = (
                     f"{self.errores_result.detectados_total} / {self.errores_result.total_plantados}"
                 )
-                row["Detección errores (%)"] = round(self.errores_result.precision_porcentaje, 1)
+                row["Cobertura (%)"] = round(self.errores_result.cobertura_porcentaje, 1)
+                row["Precisión aprox. (%)"] = round(self.errores_result.precision_aprox_porcentaje, 1)
                 row["Claros detectados"] = (
                     f"{self.errores_result.claros_detectados} / {self.errores_result.claros_total}"
                 )
                 row["Sutiles detectados"] = (
                     f"{self.errores_result.sutiles_detectados} / {self.errores_result.sutiles_total}"
                 )
+                row["Ítems sin correspondencia"] = len(self.errores_result.items_sin_correspondencia)
             row["Ítems reportados por el modelo"] = len(self.errores_result.items_extraidos)
         return row
 
@@ -463,8 +475,9 @@ def _is_header_or_short_line(sent: Span, sent_text: str) -> bool:
 
 def detect_colon_clauses_in_doc(doc: Doc, nlp: Language) -> list[ColonClauseMatch]:
     """
-    Detecta con spaCy oraciones del tipo `[Oración con verbo] : [Oración con verbo (> 3 tokens)]`,
-    descartando listas y aposiciones nominales.
+    Detecta con spaCy oraciones del tipo:
+        [Oración con verbo] : [Oración con verbo conjugado (forma finita)]
+    descartando listas, aposiciones nominales y segmentos derechos con solo formas no personales.
     """
     matches: list[ColonClauseMatch] = []
 
@@ -494,7 +507,11 @@ def detect_colon_clauses_in_doc(doc: Doc, nlp: Language) -> list[ColonClauseMatc
 
             tokens_der = [t for t in doc_der if not t.is_space and not t.is_punct]
             verbos_der = [
-                t.text for t in doc_der if t.pos_ in ("VERB", "AUX") and not t.is_space
+                t.text
+                for t in doc_der
+                if t.pos_ in ("VERB", "AUX")
+                and "Fin" in t.morph.get("VerbForm")
+                and not t.is_space
             ]
 
             if len(tokens_der) > 3 and len(verbos_der) >= 1:
@@ -532,11 +549,92 @@ def calculate_density_per_500w(occurrences: int, total_words: int) -> float:
 # ============================================================================
 
 
+def normalize_error_text(text: str) -> str:
+    """
+    Normaliza cadenas para el matching de la Prueba 3:
+    - Unicode NFC y minúsculas
+    - Quita comillas simples/dobles/tipográficas, «», asteriscos y backticks
+    - Colapsa espacios múltiples y elimina el espacio antes de coma
+    - Conserva los puntos (necesario para casos como 'indexación.aquellos')
+    """
+    if not text:
+        return ""
+    norm = unicodedata.normalize("NFC", text).lower()
+    norm = re.sub(r"[\"'“”‘’«»*`]", "", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"\s+,", ",", norm)
+    return norm
+
+
+_NORMALIZED_SOURCE_TEXTS: Final[tuple[str, ...]] = (
+    normalize_error_text(TEXTO_1_CONTENIDO),
+    normalize_error_text(TEXTO_2_CONTENIDO),
+    normalize_error_text(TEXTO_3_CONTENIDO),
+)
+
+
+def _is_copied_source_paragraph(line: str) -> bool:
+    """
+    Verifica si una línea sin formato de lista ni flecha es simplemente un párrafo o
+    oración larga copiada literalmente del texto original sin corrección.
+    """
+    norm_line = normalize_error_text(line)
+    if len(norm_line) >= 60 and any(norm_line in src for src in _NORMALIZED_SOURCE_TEXTS):
+        return True
+    return False
+
+
+def _parse_single_line_as_item(line: str, numero: int) -> ParsedErrorCorrection:
+    """Convierte una línea en un objeto `ParsedErrorCorrection` analizando flechas y barras."""
+    list_match = re.match(r"^(?:(\d+)[\.\)\-\:]|\-|\*|\•)\s*(.+)$", line)
+    content = list_match.group(2).strip() if list_match else line
+    num = int(list_match.group(1)) if (list_match and list_match.group(1)) else numero
+
+    explicacion = ""
+    if "|" in content:
+        main_part, explicacion = [p.strip() for p in content.split("|", 1)]
+    else:
+        main_part = content
+
+    arrow_split = re.split(
+        r"\s*(?:->|→|=>|—>|por:|corrección:)\s*",
+        main_part,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )
+    if len(arrow_split) == 2:
+        err_part = arrow_split[0].strip(" \"'“”‘’«»*`")
+        corr_part_raw = arrow_split[1].strip()
+        if not explicacion and (" - " in corr_part_raw or ": " in corr_part_raw):
+            sub_parts = re.split(r"\s+(?:\-|\—|:)\s+", corr_part_raw, maxsplit=1)
+            corr_part = sub_parts[0].strip(" \"'“”‘’«»*`")
+            explicacion = sub_parts[1].strip() if len(sub_parts) > 1 else ""
+        else:
+            corr_part = corr_part_raw.strip(" \"'“”‘’«»*`")
+        return ParsedErrorCorrection(
+            numero=num,
+            error_identificado=err_part,
+            correccion_propuesta=corr_part,
+            explicacion=explicacion,
+            linea_original=line,
+            tiene_flecha=True,
+        )
+
+    return ParsedErrorCorrection(
+        numero=num,
+        error_identificado=main_part.strip(" \"'“”‘’«»*`"),
+        correccion_propuesta="",
+        explicacion=explicacion,
+        linea_original=line,
+        tiene_flecha=False,
+    )
+
+
 def parse_error_correction_list(raw_response: str) -> list[ParsedErrorCorrection]:
     """
     Parsea la lista numerada o con viñetas devuelta por el LLM con los errores y correcciones.
     Soporta tanto el formato estructurado (`1. "error" -> "corrección" | explicación`) como
-    variantes libres con flechas (`->`, `→`, `por`, `Corrección:`).
+    variantes con flechas (`->`, `→`, `=>`, `—>`, `por:`, `corrección:`).
     """
     if not raw_response or not raw_response.strip():
         return []
@@ -545,45 +643,14 @@ def parse_error_correction_list(raw_response: str) -> list[ParsedErrorCorrection
     lines = [line.strip() for line in raw_response.strip().splitlines() if line.strip()]
 
     for line in lines:
-        # Filtrar líneas que parezcan ítems de lista (empiezan con número, guion o asterisco, o contienen -> / →)
         list_match = re.match(r"^(?:(\d+)[\.\)\-\:]|\-|\*|\•)\s*(.+)$", line)
-        if not list_match and ("->" not in line and "→" not in line):
+        has_arrow = bool(
+            re.search(r"(?:->|→|=>|—>|por:|corrección:)", line, flags=re.IGNORECASE)
+        )
+        if not list_match and not has_arrow:
             continue
 
-        content = list_match.group(2).strip() if list_match else line
-        num = int(list_match.group(1)) if (list_match and list_match.group(1)) else (len(items) + 1)
-
-        # Separar explicación tras '|' o ' — ' o ':' si existe flecha antes
-        explicacion = ""
-        if "|" in content:
-            main_part, explicacion = [p.strip() for p in content.split("|", 1)]
-        else:
-            main_part = content
-
-        # Separar error -> corrección
-        arrow_split = re.split(r"\s*(?:->|→|=>|—>|por:|corrección:)\s*", main_part, maxsplit=1, flags=re.IGNORECASE)
-        if len(arrow_split) == 2:
-            err_part = arrow_split[0].strip(" \"'«»*`")
-            corr_part_raw = arrow_split[1].strip()
-            if not explicacion and (" - " in corr_part_raw or ": " in corr_part_raw):
-                sub_parts = re.split(r"\s+(?:\-|\—|:)\s+", corr_part_raw, maxsplit=1)
-                corr_part = sub_parts[0].strip(" \"'«»*`")
-                explicacion = sub_parts[1].strip() if len(sub_parts) > 1 else ""
-            else:
-                corr_part = corr_part_raw.strip(" \"'«»*`")
-        else:
-            err_part = main_part.strip(" \"'«»*`")
-            corr_part = ""
-
-        items.append(
-            ParsedErrorCorrection(
-                numero=num,
-                error_identificado=err_part,
-                correccion_propuesta=corr_part,
-                explicacion=explicacion,
-                linea_original=line,
-            )
-        )
+        items.append(_parse_single_line_as_item(line, len(items) + 1))
 
     return items
 
@@ -593,19 +660,92 @@ def evaluate_error_detection(
     planted_errors: tuple[PlantedError, ...] | None = None,
 ) -> ErrorDetectionResult:
     """
-    Evalúa la respuesta de un modelo en el Benchmark de Detección de Errores.
-    Si `planted_errors` está disponible (textos 1, 2 o 3), verifica cuáles errores claros y
-    sutiles fueron efectivamente detectados por el modelo.
+    Evalúa la respuesta de un modelo en el Benchmark de Detección de Errores:
+    - Hace el matching exclusivamente contra ítems extraídos (sin buscar en el cuerpo libre).
+    - Si el parser no extrae ítems de una respuesta no vacía, trata cada línea no vacía
+      como un ítem (descartando párrafos copiados literalmente del texto fuente) y activa `aviso_formato=True`.
+    - Asignación uno a uno entre ítems y errores plantados mediante `anclas` y desempate por `correcciones`.
     """
+    if not raw_model_response or not raw_model_response.strip():
+        if not planted_errors:
+            return ErrorDetectionResult()
+        claros_total = sum(1 for e in planted_errors if e.categoria.lower() == "claro")
+        sutiles_total = sum(1 for e in planted_errors if e.categoria.lower() == "sutil")
+        return ErrorDetectionResult(
+            tiene_ground_truth=True,
+            total_plantados=len(planted_errors),
+            claros_total=claros_total,
+            sutiles_total=sutiles_total,
+            detalles_plantados=[
+                PlantedErrorMatchDetail(
+                    error_plantado=pe,
+                    detectado=False,
+                    evidencia_modelo="(No detectado)",
+                )
+                for pe in planted_errors
+            ],
+        )
+
     parsed_items = parse_error_correction_list(raw_model_response)
+    aviso_formato = False
+
+    if not parsed_items:
+        aviso_formato = True
+        raw_lines = [line.strip() for line in raw_model_response.strip().splitlines() if line.strip()]
+        parsed_items = [
+            _parse_single_line_as_item(line, idx)
+            for idx, line in enumerate(raw_lines, start=1)
+            if not _is_copied_source_paragraph(line)
+        ]
+
     if not planted_errors:
         return ErrorDetectionResult(
             items_extraidos=parsed_items,
             tiene_ground_truth=False,
+            aviso_formato=aviso_formato,
         )
 
-    response_lower = raw_model_response.lower()
-    lines_lower = [line.strip() for line in raw_model_response.splitlines() if line.strip()]
+    # Asignación uno a uno: cada ítem acredita a lo sumo un error plantado y viceversa
+    accredited_by: dict[int, ParsedErrorCorrection] = {}
+    items_sin_correspondencia: list[ParsedErrorCorrection] = []
+
+    for item in parsed_items:
+        target_norm = (
+            normalize_error_text(item.error_identificado)
+            if item.tiene_flecha
+            else normalize_error_text(item.linea_original)
+        )
+        corr_norm = (
+            normalize_error_text(item.correccion_propuesta)
+            if item.tiene_flecha
+            else normalize_error_text(item.linea_original)
+        )
+
+        candidatos: list[PlantedError] = [
+            p_err
+            for p_err in planted_errors
+            if p_err.orden not in accredited_by
+            and any(normalize_error_text(ancla) in target_norm for ancla in p_err.anclas)
+        ]
+
+        if not candidatos:
+            items_sin_correspondencia.append(item)
+            continue
+
+        if len(candidatos) == 1:
+            elegido = candidatos[0]
+        else:
+            con_correccion = [
+                p_err
+                for p_err in candidatos
+                if any(normalize_error_text(c) in corr_norm for c in p_err.correcciones)
+            ]
+            if con_correccion:
+                elegido = min(con_correccion, key=lambda e: e.orden)
+            else:
+                elegido = min(candidatos, key=lambda e: e.orden)
+
+        accredited_by[elegido.orden] = item
 
     detalles: list[PlantedErrorMatchDetail] = []
     claros_total = sum(1 for e in planted_errors if e.categoria.lower() == "claro")
@@ -614,15 +754,8 @@ def evaluate_error_detection(
     sutiles_det = 0
 
     for p_err in planted_errors:
-        matched_line = ""
-        for line in lines_lower:
-            if any(k.lower() in line for k in p_err.claves_busqueda):
-                matched_line = line
-                break
-        if not matched_line and any(k.lower() in response_lower for k in p_err.claves_busqueda):
-            matched_line = "(Mencionado en el cuerpo de la respuesta)"
-
-        is_detected = bool(matched_line)
+        matched_item = accredited_by.get(p_err.orden)
+        is_detected = matched_item is not None
         if is_detected:
             if p_err.categoria.lower() == "claro":
                 claros_det += 1
@@ -633,25 +766,34 @@ def evaluate_error_detection(
             PlantedErrorMatchDetail(
                 error_plantado=p_err,
                 detectado=is_detected,
-                evidencia_modelo=matched_line if is_detected else "(No detectado)",
+                evidencia_modelo=matched_item.linea_original if matched_item else "(No detectado)",
             )
         )
 
     total_plantados = len(planted_errors)
     detectados_total = claros_det + sutiles_det
-    precision = (detectados_total / total_plantados) * 100.0 if total_plantados > 0 else 0.0
+    cobertura = (detectados_total / total_plantados) * 100.0 if total_plantados > 0 else 0.0
+
+    total_listados = len(parsed_items)
+    con_correspondencia = total_listados - len(items_sin_correspondencia)
+    precision_aprox = (
+        (con_correspondencia / total_listados) * 100.0 if total_listados > 0 else 0.0
+    )
 
     return ErrorDetectionResult(
         items_extraidos=parsed_items,
+        items_sin_correspondencia=items_sin_correspondencia,
         tiene_ground_truth=True,
         total_plantados=total_plantados,
         detectados_total=detectados_total,
-        precision_porcentaje=precision,
+        cobertura_porcentaje=cobertura,
+        precision_aprox_porcentaje=precision_aprox,
         claros_total=claros_total,
         claros_detectados=claros_det,
         sutiles_total=sutiles_total,
         sutiles_detectados=sutiles_det,
         detalles_plantados=detalles,
+        aviso_formato=aviso_formato,
     )
 
 
@@ -820,14 +962,16 @@ def format_detailed_audit_log(
             if er.tiene_ground_truth:
                 lines.append(
                     f"[PRUEBA 3 - DETECCIÓN DE ERRORES]: {er.detectados_total}/{er.total_plantados} "
-                    f"({er.precision_porcentaje:.1f}%) | Claros: {er.claros_detectados}/{er.claros_total} | "
-                    f"Sutiles: {er.sutiles_detectados}/{er.sutiles_total}"
+                    f"(Cobertura: {er.cobertura_porcentaje:.1f}% | Precisión aprox.: {er.precision_aprox_porcentaje:.1f}%) | "
+                    f"Claros: {er.claros_detectados}/{er.claros_total} | "
+                    f"Sutiles: {er.sutiles_detectados}/{er.sutiles_total} | "
+                    f"Ítems sin correspondencia: {len(er.items_sin_correspondencia)}"
                 )
                 for det_e in er.detalles_plantados:
                     est = "DETECTADO" if det_e.detectado else "OMITIDO"
                     lines.append(
                         f"  - #{det_e.error_plantado.orden} [{det_e.error_plantado.categoria}] "
-                        f"«{det_e.error_plantado.fragmento_erroneo}» -> [{est}]"
+                        f"«{det_e.error_plantado.fragmento_erroneo}» -> [{est}] | Evidencia: {det_e.evidencia_modelo}"
                     )
             else:
                 lines.append(f"[PRUEBA 3 - DETECCIÓN DE ERRORES (TEXTO PROPIO)]: {len(er.items_extraidos)} ítems reportados")

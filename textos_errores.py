@@ -18,7 +18,8 @@ class PlantedError:
     fenomeno: str
     fragmento_erroneo: str
     correccion_esperada: str
-    claves_busqueda: tuple[str, ...]  # Subcadenas para verificar si el modelo identificó el error
+    anclas: tuple[str, ...]  # Subcadenas distintivas del fragmento erróneo tal como aparece en el texto
+    correcciones: tuple[str, ...]  # Formas corregidas para desempate
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Ortografía léxica y locución preposicional",
         fragmento_erroneo="Atravez de una red",
         correccion_esperada="A través de una red",
-        claves_busqueda=("atravez", "a través"),
+        anclas=("atravez",),
+        correcciones=("a través de una red", "a través"),
     ),
     PlantedError(
         orden=2,
@@ -65,7 +67,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Pluralización indebida de 'haber' impersonal",
         fragmento_erroneo="En cada taller habían muchos operarios",
         correccion_esperada="En cada taller había muchos operarios",
-        claves_busqueda=("habían muchos", "había muchos"),
+        anclas=("habían muchos", "taller habían"),
+        correcciones=("había muchos", "taller había"),
     ),
     PlantedError(
         orden=3,
@@ -73,7 +76,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Coma entre sujeto y verbo (coma criminal)",
         fragmento_erroneo="Los componedores tipográficos de los talleres madrileños, organizaban",
         correccion_esperada="Los componedores tipográficos de los talleres madrileños organizaban",
-        claves_busqueda=("talleres madrileños, organizaban", "madrileños, organizaban", "sujeto y verbo"),
+        anclas=("madrileños, organizaban", "talleres madrileños,"),
+        correcciones=("madrileños organizaban",),
     ),
     PlantedError(
         orden=4,
@@ -81,7 +85,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Confusión de homófonos ('echo' / 'hecho')",
         fragmento_erroneo="el echo de que ninguna edición",
         correccion_esperada="el hecho de que ninguna edición",
-        claves_busqueda=("el echo", "el hecho"),
+        anclas=("el echo",),
+        correcciones=("el hecho",),
     ),
     PlantedError(
         orden=5,
@@ -89,7 +94,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Dequeísmo",
         fragmento_erroneo="pensaban de que la puntuación",
         correccion_esperada="pensaban que la puntuación",
-        claves_busqueda=("pensaban de que", "pensaban que", "dequeísmo", "dequeismo"),
+        anclas=("pensaban de que",),
+        correcciones=("pensaban que",),
     ),
     PlantedError(
         orden=6,
@@ -97,7 +103,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Confusión 'sino' adversativo por 'si no' condicional",
         fragmento_erroneo="Sino se conservaban los pliegos",
         correccion_esperada="Si no se conservaban los pliegos",
-        claves_busqueda=("sino se conservaban", "si no se conservaban"),
+        anclas=("sino se conservaban",),
+        correcciones=("si no se conservaban", "si no"),
     ),
     PlantedError(
         orden=7,
@@ -105,7 +112,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Impersonal refleja con CD de persona pluralizado",
         fragmento_erroneo="se perseguían a los impresores clandestinos",
         correccion_esperada="se perseguía a los impresores clandestinos",
-        claves_busqueda=("se perseguían a los", "se perseguía a los", "perseguían a los impresores"),
+        anclas=("se perseguían a los", "perseguían a los impresores"),
+        correcciones=("se perseguía a los", "perseguía a los impresores", "se perseguían los impresores"),
     ),
     PlantedError(
         orden=8,
@@ -113,7 +121,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Gerundio de posterioridad temporal",
         fragmento_erroneo="publicándose la edición príncipe del Quijote en enero de 1605, convirtiéndose décadas más tarde",
         correccion_esperada="y se convirtió décadas más tarde (o: que se convertiría décadas más tarde)",
-        claves_busqueda=("convirtiéndose décadas", "gerundio de posterioridad", "publicándose la edición"),
+        anclas=("convirtiéndose décadas", "publicándose la edición"),
+        correcciones=("se convirtió décadas", "se convertiría décadas", "y se publicó"),
     ),
     PlantedError(
         orden=9,
@@ -121,7 +130,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Ortografía ('exhuberante' con h intercalada indebida)",
         fragmento_erroneo="producción exhuberante",
         correccion_esperada="producción exuberante",
-        claves_busqueda=("exhuberante", "exuberante"),
+        anclas=("exhuberante",),
+        correcciones=("exuberante",),
     ),
     PlantedError(
         orden=10,
@@ -129,7 +139,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Queísmo en locución conjuntiva ('con la condición de que')",
         fragmento_erroneo="con la condición que el taller entregara",
         correccion_esperada="con la condición de que el taller entregara",
-        claves_busqueda=("condición que el", "condición de que", "queísmo", "queismo"),
+        anclas=("condición que",),
+        correcciones=("condición de que",),
     ),
     PlantedError(
         orden=11,
@@ -137,7 +148,8 @@ ERRORES_TEXTO_1: Final[tuple[PlantedError, ...]] = (
         fenomeno="Impropiedad léxica / paronimia ('infringir' por 'infligir')",
         fragmento_erroneo="infringir un castigo ejemplar",
         correccion_esperada="infligir un castigo ejemplar",
-        claves_busqueda=("infringir un castigo", "infligir un castigo", "infringir", "infligir"),
+        anclas=("infringir un castigo", "sino también infringir"),
+        correcciones=("infligir un castigo", "infligir"),
     ),
 )
 
@@ -169,7 +181,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Confusión 'a ver' (preposición + verbo ver) por 'haber' (infinitivo)",
         fragmento_erroneo="debe a ver un protocolo público",
         correccion_esperada="debe haber un protocolo público",
-        claves_busqueda=("debe a ver", "debe haber", "a ver un protocolo"),
+        anclas=("debe a ver", "a ver un protocolo"),
+        correcciones=("debe haber", "haber un protocolo"),
     ),
     PlantedError(
         orden=2,
@@ -177,7 +190,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Pluralización indebida de 'haber' impersonal",
         fragmento_erroneo="habían cientos de cintas magnéticas",
         correccion_esperada="había cientos de cintas magnéticas",
-        claves_busqueda=("habían cientos", "había cientos"),
+        anclas=("habían cientos", "universitarias habían"),
+        correcciones=("había cientos", "universitarias había"),
     ),
     PlantedError(
         orden=3,
@@ -185,7 +199,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Coma entre sujeto y verbo (coma criminal)",
         fragmento_erroneo="Los responsables técnicos de los grandes centros de documentación nacional, advierten",
         correccion_esperada="Los responsables técnicos de los grandes centros de documentación nacional advierten",
-        claves_busqueda=("documentación nacional, advierten", "nacional, advierten", "sujeto y verbo"),
+        anclas=("nacional, advierten", "documentación nacional,"),
+        correcciones=("nacional advierten",),
     ),
     PlantedError(
         orden=4,
@@ -193,7 +208,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Ortografía verbal ('absorver' con v por 'absorber' con b)",
         fragmento_erroneo="deben absorver únicamente estándares",
         correccion_esperada="deben absorber únicamente estándares",
-        claves_busqueda=("absorver", "absorber"),
+        anclas=("absorver",),
+        correcciones=("absorber",),
     ),
     PlantedError(
         orden=5,
@@ -201,7 +217,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Dequeísmo en oración subordinada sustantiva de sujeto",
         fragmento_erroneo="resulta evidente de que las políticas",
         correccion_esperada="resulta evidente que las políticas",
-        claves_busqueda=("evidente de que", "evidente que", "dequeísmo", "dequeismo"),
+        anclas=("evidente de que",),
+        correcciones=("evidente que",),
     ),
     PlantedError(
         orden=6,
@@ -209,7 +226,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Ortografía de gerundio irregular ('llendo' por 'yendo')",
         fragmento_erroneo="llendo a ciegas entre carpetas",
         correccion_esperada="yendo a ciegas entre carpetas",
-        claves_busqueda=("llendo", "yendo"),
+        anclas=("llendo",),
+        correcciones=("yendo",),
     ),
     PlantedError(
         orden=7,
@@ -217,7 +235,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Ortografía ('conciente' por 'consciente')",
         fragmento_erroneo="plenamente conciente de todo aquello",
         correccion_esperada="plenamente consciente de todo aquello",
-        claves_busqueda=("conciente", "consciente"),
+        anclas=("conciente",),
+        correcciones=("consciente",),
     ),
     PlantedError(
         orden=8,
@@ -225,15 +244,17 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Falta de espacio tras punto y minúscula inicial de oración",
         fragmento_erroneo="indexación.aquellos fondos documentales",
         correccion_esperada="indexación. Aquellos fondos documentales",
-        claves_busqueda=("indexación.aquellos", ".aquellos", "aquellos fondos"),
+        anclas=("indexación.aquellos", ".aquellos"),
+        correcciones=("indexación. aquellos", ". aquellos"),
     ),
     PlantedError(
         orden=9,
         categoria="Sutil",
         fenomeno="Gerundio especificativo / del Boletín Oficial ('resolución regulando')",
-        fragmento_erroneo="promulgó una resolución regulando la guarda perpetua y estableciendo",
+        fragmento_erroneo="promulgó una resolución regulando la guarda perpetua de los expedientes administrativos electrónicos y estableciendo",
         correccion_esperada="promulgó una resolución que regula la guarda perpetua y establece",
-        claves_busqueda=("resolución regulando", "gerundio especificativo", "gerundio"),
+        anclas=("resolución regulando", "guarda perpetua de los expedientes administrativos electrónicos y estableciendo"),
+        correcciones=("resolución que regula", "resolución que regulaba", "para regular"),
     ),
     PlantedError(
         orden=10,
@@ -241,7 +262,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Ultracorrección morfológica ('preveer' por 'prever')",
         fragmento_erroneo="la normativa omitió preveer las partidas",
         correccion_esperada="la normativa omitió prever las partidas",
-        claves_busqueda=("preveer", "prever"),
+        anclas=("preveer",),
+        correcciones=("prever",),
     ),
     PlantedError(
         orden=11,
@@ -249,7 +271,8 @@ ERRORES_TEXTO_2: Final[tuple[PlantedError, ...]] = (
         fenomeno="Impropiedad léxica ('detentar legítimamente' — detentar implica posesión ilegítima)",
         fragmento_erroneo="pasen a detentar legítimamente durante diez o quince años los derechos",
         correccion_esperada="pasen a ostentar / ejercer / poseer legítimamente los derechos",
-        claves_busqueda=("detentar legítimamente", "detentar", "ostentar"),
+        anclas=("detentar legítimamente", "pasen a detentar"),
+        correcciones=("ostentar", "ejercer", "poseer"),
     ),
 )
 
@@ -281,7 +304,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Confusión ortográfica ('hayar' con y por 'hallar' con ll)",
         fragmento_erroneo="intentado hayar evidencias precisas",
         correccion_esperada="intentado hallar evidencias precisas",
-        claves_busqueda=("hayar", "hallar"),
+        anclas=("hayar",),
+        correcciones=("hallar",),
     ),
     PlantedError(
         orden=2,
@@ -289,7 +313,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Confusión 'sobretodo' (sustantivo: abrigo) por 'sobre todo' (locución adverbial)",
         fragmento_erroneo="se acentúa sobretodo cuando el lector",
         correccion_esperada="se acentúa sobre todo cuando el lector",
-        claves_busqueda=("sobretodo", "sobre todo"),
+        anclas=("sobretodo",),
+        correcciones=("sobre todo",),
     ),
     PlantedError(
         orden=3,
@@ -297,7 +322,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Coma entre sujeto y verbo (coma criminal)",
         fragmento_erroneo="Los equipos de investigación en psicolingüística experimental de varias universidades públicas, han observado",
         correccion_esperada="Los equipos de investigación en psicolingüística experimental de varias universidades públicas han observado",
-        claves_busqueda=("universidades públicas, han observado", "públicas, han observado", "sujeto y verbo"),
+        anclas=("públicas, han observado", "universidades públicas,"),
+        correcciones=("públicas han observado",),
     ),
     PlantedError(
         orden=4,
@@ -305,7 +331,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Confusión 'porque' conjunción causal por 'por qué' interrogativo indirecto",
         fragmento_erroneo="Para comprender porque se produce esta ilusión",
         correccion_esperada="Para comprender por qué se produce esta ilusión",
-        claves_busqueda=("comprender porque", "comprender por qué", "por qué se produce"),
+        anclas=("comprender porque", "porque se produce esta ilusión"),
+        correcciones=("comprender por qué", "por qué se produce"),
     ),
     PlantedError(
         orden=5,
@@ -313,7 +340,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Ortografía ('escases' con s por 'escasez' con z)",
         fragmento_erroneo="La escases de puntos de anclaje",
         correccion_esperada="La escasez de puntos de anclaje",
-        claves_busqueda=("escases", "escasez"),
+        anclas=("escases",),
+        correcciones=("escasez",),
     ),
     PlantedError(
         orden=6,
@@ -321,7 +349,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Queísmo en locución ('no cabe duda de que')",
         fragmento_erroneo="No cabe duda que la exposición constante",
         correccion_esperada="No cabe duda de que la exposición constante",
-        claves_busqueda=("no cabe duda que", "no cabe duda de que", "queísmo", "queismo"),
+        anclas=("no cabe duda que", "cabe duda que"),
+        correcciones=("no cabe duda de que", "cabe duda de que"),
     ),
     PlantedError(
         orden=7,
@@ -329,7 +358,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Cruce sintáctico de régimen ('conlleva a' por 'conlleva' transitivo o 'lleva a')",
         fragmento_erroneo="Dicha impaciencia conlleva a una pérdida gradual",
         correccion_esperada="Dicha impaciencia conlleva una pérdida gradual (o: lleva a una pérdida)",
-        claves_busqueda=("conlleva a", "conlleva una"),
+        anclas=("conlleva a",),
+        correcciones=("conlleva una", "lleva a", "conduce a"),
     ),
     PlantedError(
         orden=8,
@@ -337,7 +367,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Gerundio de posterioridad temporal",
         fragmento_erroneo="seleccionaron una cohorte de trescientos ingresantes universitarios en marzo, evaluando en diciembre",
         correccion_esperada="seleccionaron una cohorte en marzo y evaluaron en diciembre",
-        claves_busqueda=("evaluando en diciembre", "gerundio de posterioridad"),
+        anclas=("evaluando en diciembre", "en marzo, evaluando"),
+        correcciones=("y evaluaron en diciembre", "para evaluar en diciembre", "y la evaluaron"),
     ),
     PlantedError(
         orden=9,
@@ -345,7 +376,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Discordancia en impersonal refleja con CD humano ('se entrevistaron a los estudiantes')",
         fragmento_erroneo="se entrevistaron a los estudiantes de distintas carreras",
         correccion_esperada="se entrevistó a los estudiantes (o pasiva refleja: fueron entrevistados los estudiantes)",
-        claves_busqueda=("se entrevistaron a los", "se entrevistó a los", "entrevistaron a los estudiantes"),
+        anclas=("se entrevistaron a los", "entrevistaron a los estudiantes"),
+        correcciones=("se entrevistó a los", "entrevistó a los estudiantes", "se entrevistaron los estudiantes", "fueron entrevistados"),
     ),
     PlantedError(
         orden=10,
@@ -353,7 +385,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Quesuismo ('que su' en lugar del relativo posesivo 'cuya')",
         fragmento_erroneo="un estudiante que su práctica de estudio se limitaba",
         correccion_esperada="un estudiante cuya práctica de estudio se limitaba",
-        claves_busqueda=("que su práctica", "cuya práctica", "quesuismo"),
+        anclas=("que su práctica", "estudiante que su"),
+        correcciones=("cuya práctica", "estudiante cuya"),
     ),
     PlantedError(
         orden=11,
@@ -361,7 +394,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Pluralización indebida de 'hacer' impersonal temporal ('hacen ya más de quince años')",
         fragmento_erroneo="Hacen ya más de quince años",
         correccion_esperada="Hace ya más de quince años",
-        claves_busqueda=("hacen ya más", "hace ya más", "hacen ya"),
+        anclas=("hacen ya más", "hacen ya"),
+        correcciones=("hace ya más", "hace ya"),
     ),
     PlantedError(
         orden=12,
@@ -369,7 +403,8 @@ ERRORES_TEXTO_3: Final[tuple[PlantedError, ...]] = (
         fenomeno="Impropiedad léxica ('adolece de serenidad' usado como 'carece de', cuando adolecer significa padecer un defecto)",
         fragmento_erroneo="adolece de serenidad analítica y de escucha atenta",
         correccion_esperada="carece de serenidad analítica (o: adolece de falta de serenidad)",
-        claves_busqueda=("adolece de serenidad", "carece de serenidad", "adolecer"),
+        anclas=("adolece de serenidad",),
+        correcciones=("carece de serenidad", "adolece de falta de serenidad", "carece de"),
     ),
 )
 

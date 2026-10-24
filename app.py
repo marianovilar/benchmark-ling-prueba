@@ -109,7 +109,7 @@ def highlight_reframing_html(sentence: str, fragment: str) -> str:
 
 
 def highlight_colon_clause_html(seg_izq: str, seg_der: str, verbos_der: list[str]) -> str:
-    """Resalta los dos puntos y los verbos conjugados detectados en la segunda proposición."""
+    """Resalta los dos puntos y los verbos conjugados (forma finita) detectados en la segunda proposición."""
     izq_html = html.escape(seg_izq)
     der_html = html.escape(seg_der)
 
@@ -120,7 +120,9 @@ def highlight_colon_clause_html(seg_izq: str, seg_der: str, verbos_der: list[str
             lambda m: (
                 '<span style="background-color: #b9f6ca; color: #004d40; '
                 'padding: 1px 4px; border-radius: 3px; font-weight: 600;" '
-                f'title="Verbo detectado por spaCy (VERB/AUX)">{m.group(0)}</span>'
+                'title="Verbo conjugado (forma finita) detectado por spaCy: '
+                '[Oración con verbo] : [Oración con verbo conjugado (forma finita)]">'
+                f"{m.group(0)}</span>"
             ),
             der_html,
         )
@@ -136,7 +138,7 @@ def parse_custom_ground_truth_errors(raw_gt_lines: str) -> tuple[PlantedError, .
     """
     Convierte una lista manual de errores esperados escrita por el docente
     (formato: `Claro | error -> corrección` o simplemente `error -> corrección` por línea)
-    en objetos `PlantedError` para poder evaluar cualquier texto propio contra una clave fija.
+    en objetos `PlantedError` con `anclas` y `correcciones`.
     """
     errors: list[PlantedError] = []
     for idx, line in enumerate(raw_gt_lines.strip().splitlines(), start=1):
@@ -157,7 +159,7 @@ def parse_custom_ground_truth_errors(raw_gt_lines: str) -> tuple[PlantedError, .
             corr_frag = "(Ver corrección)"
 
         if err_frag:
-            keys = tuple(k for k in (err_frag.lower(), corr_frag.lower()) if k and k != "(ver corrección)")
+            correcciones = (corr_frag,) if (corr_frag and corr_frag != "(Ver corrección)") else ()
             errors.append(
                 PlantedError(
                     orden=idx,
@@ -165,7 +167,8 @@ def parse_custom_ground_truth_errors(raw_gt_lines: str) -> tuple[PlantedError, .
                     fenomeno="Error definido por el usuario",
                     fragmento_erroneo=err_frag,
                     correccion_esperada=corr_frag,
-                    claves_busqueda=keys,
+                    anclas=(err_frag,),
+                    correcciones=correcciones,
                 )
             )
     return tuple(errors)
@@ -244,8 +247,8 @@ def render_about_tab() -> None:
         * **Prueba 1 (test metalingüístico de opción múltiple):** compara de forma estricta las respuestas emitidas por cada modelo (`A`, `B`, `C` o `D`) contra una clave fija (*ground truth*) basada en la *Nueva gramática de la lengua española* (RAE / ASALE).
         * **Prueba 2 (auditoría estilística en prosa):** contabiliza y normaliza cada 500 palabras la densidad de dos tics sintáctico-retóricos frecuentes en textos generados por IA:
           1. *Reframing asindético y adversativo* (*«No es X, es Y»*, *«No se trata de X, se trata de Y»*, *«No era solo X, sino Y»*), detectado mediante expresiones regulares en Python.
-          2. *Yuxtaposición explicativo-desarrolladora con dos puntos* (`[Oración con verbo] : [Oración completa con verbo conjugado]`), detectada mediante segmentación oracional y etiquetado morfosintáctico (*POS-tagging*) con la biblioteca **`spaCy` (`es_core_news_lg`)**, descartando listas y aposiciones nominales.
-        * **Prueba 3 (detección y corrección de errores en textos largos):** verifica mediante reglas de coincidencia en Python cuántos de los errores plantados en el texto de referencia (tanto errores **claros** de ortografía/concordancia como errores **sutiles** de puntuación, queísmo, dequeísmo, quesuismo, gerundios e impropiedades léxicas) fueron efectivamente identificados por cada modelo.
+          2. *Yuxtaposición explicativo-desarrolladora con dos puntos* (`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`), detectada mediante segmentación oracional y etiquetado morfosintáctico (*POS-tagging*) con la biblioteca **`spaCy` (`es_core_news_lg`)**, descartando listas, aposiciones nominales y segmentos con solo formas no personales.
+        * **Prueba 3 (detección y corrección de errores en textos largos):** verifica mediante reglas de coincidencia uno a uno en Python cuántos de los errores plantados en el texto de referencia (tanto errores **claros** de ortografía/concordancia como errores **sutiles** de puntuación, queísmo, dequeísmo, quesuismo, gerundios e impropiedades léxicas) fueron efectivamente identificados por cada modelo.
 
         ---
 
@@ -274,7 +277,7 @@ def render_header_and_prompts() -> None:
                    Evalúa precisión gramatical normativa (0 a 4 puntos) contra una clave fija (*ground truth*).
                 2. **✍️ Prueba 2 — Auditoría estilística en prosa (reframing + dos puntos):**
                    - **Tic 1 — Reframing asindético y adversativo (*«No es X, es Y»* / *«No era solo X, sino Y»*):** Fórmulas binarias donde se niega un término para reformularlo tras coma o punto y coma.
-                   - **Tic 2 — Dos puntos oracionales (`[Oración] : [Oración con verbo]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado (`VERB`/`AUX`).
+                   - **Tic 2 — Dos puntos oracionales (`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado en forma finita, descartando listas, aposiciones nominales e infinitivos/participios sueltos.
                 3. **🔎 Prueba 3 — Detección y corrección de errores en textos largos (~1000 palabras):**
                    Compara la lista de errores que encuentra el modelo contra una **clave oficial de errores plantados** (divididos en **claros** y **sutiles**).
                 """
@@ -432,20 +435,56 @@ def render_error_detection_comparison(res_a: ModelAuditResult, res_b: ModelAudit
     er_a = res_a.errores_result
     er_b = res_b.errores_result
 
+    if er_a.aviso_formato:
+        st.warning(
+            f"⚠️ **{res_a.modelo}**: la respuesta no siguió el formato de lista numerada o con flechas (`->`). "
+            "Se evaluó cada línea no vacía como un ítem individual."
+        )
+    if er_b.aviso_formato:
+        st.warning(
+            f"⚠️ **{res_b.modelo}**: la respuesta no siguió el formato de lista numerada o con flechas (`->`). "
+            "Se evaluó cada línea no vacía como un ítem individual."
+        )
+
     if er_a.tiene_ground_truth and er_b.tiene_ground_truth:
         m_col1, m_col2 = st.columns(2)
         with m_col1:
             st.markdown(f"**{res_a.modelo}**")
-            k1, k2, k3 = st.columns(3)
-            k1.metric("Total detectados", f"{er_a.detectados_total}/{er_a.total_plantados}", f"{er_a.precision_porcentaje:.1f}%")
-            k2.metric("Errores claros", f"{er_a.claros_detectados}/{er_a.claros_total}")
-            k3.metric("Errores sutiles", f"{er_a.sutiles_detectados}/{er_a.sutiles_total}")
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric(
+                "Cobertura (recall)",
+                f"{er_a.detectados_total}/{er_a.total_plantados}",
+                f"{er_a.cobertura_porcentaje:.1f}%",
+            )
+            k2.metric(
+                "Precisión aproximada",
+                f"{er_a.precision_aprox_porcentaje:.1f}%",
+                f"{len(er_a.items_sin_correspondencia)} sin corresp.",
+                delta_color="off",
+            )
+            k3.metric("Errores claros", f"{er_a.claros_detectados}/{er_a.claros_total}")
+            k4.metric("Errores sutiles", f"{er_a.sutiles_detectados}/{er_a.sutiles_total}")
         with m_col2:
             st.markdown(f"**{res_b.modelo}**")
-            k1, k2, k3 = st.columns(3)
-            k1.metric("Total detectados", f"{er_b.detectados_total}/{er_b.total_plantados}", f"{er_b.precision_porcentaje:.1f}%")
-            k2.metric("Errores claros", f"{er_b.claros_detectados}/{er_b.claros_total}")
-            k3.metric("Errores sutiles", f"{er_b.sutiles_detectados}/{er_b.sutiles_total}")
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric(
+                "Cobertura (recall)",
+                f"{er_b.detectados_total}/{er_b.total_plantados}",
+                f"{er_b.cobertura_porcentaje:.1f}%",
+            )
+            k2.metric(
+                "Precisión aproximada",
+                f"{er_b.precision_aprox_porcentaje:.1f}%",
+                f"{len(er_b.items_sin_correspondencia)} sin corresp.",
+                delta_color="off",
+            )
+            k3.metric("Errores claros", f"{er_b.claros_detectados}/{er_b.claros_total}")
+            k4.metric("Errores sutiles", f"{er_b.sutiles_detectados}/{er_b.sutiles_total}")
+
+        st.caption(
+            "Nota sobre **Precisión aproximada** (`ítems con correspondencia / ítems listados`): "
+            "algunos ítems sin correspondencia en la clave pueden ser errores o sugerencias de estilo reales no plantados."
+        )
 
         rows_err = []
         for det_a, det_b in zip(er_a.detalles_plantados, er_b.detalles_plantados):
@@ -459,10 +498,53 @@ def render_error_detection_comparison(res_a: ModelAuditResult, res_b: ModelAudit
                     "Error en el texto": pe.fragmento_erroneo,
                     "Corrección esperada": pe.correccion_esperada,
                     f"{res_a.modelo}": "✅ Detectado" if det_a.detectado else "❌ Omitido",
+                    f"Evidencia ({res_a.modelo})": det_a.evidencia_modelo,
                     f"{res_b.modelo}": "✅ Detectado" if det_b.detectado else "❌ Omitido",
+                    f"Evidencia ({res_b.modelo})": det_b.evidencia_modelo,
                 }
             )
         st.dataframe(pd.DataFrame(rows_err), use_container_width=True, hide_index=True)
+
+        with st.expander("🔍 Ítems sin correspondencia en la clave", expanded=False):
+            st.caption(
+                "Ítems reportados por cada modelo que no coincidieron con ninguno de los errores plantados en la clave "
+                "(pueden ser falsos positivos o sugerencias adicionales):"
+            )
+            u_left, u_right = st.columns(2)
+            with u_left:
+                st.markdown(f"**{res_a.modelo}** ({len(er_a.items_sin_correspondencia)} sin correspondencia)")
+                if er_a.items_sin_correspondencia:
+                    df_un_a = pd.DataFrame(
+                        [
+                            {
+                                "#": it.numero,
+                                "Error señalado": it.error_identificado,
+                                "Corrección": it.correccion_propuesta,
+                                "Explicación": it.explicacion,
+                            }
+                            for it in er_a.items_sin_correspondencia
+                        ]
+                    )
+                    st.dataframe(df_un_a, use_container_width=True, hide_index=True)
+                else:
+                    st.success("0 ítems sin correspondencia.")
+            with u_right:
+                st.markdown(f"**{res_b.modelo}** ({len(er_b.items_sin_correspondencia)} sin correspondencia)")
+                if er_b.items_sin_correspondencia:
+                    df_un_b = pd.DataFrame(
+                        [
+                            {
+                                "#": it.numero,
+                                "Error señalado": it.error_identificado,
+                                "Corrección": it.correccion_propuesta,
+                                "Explicación": it.explicacion,
+                            }
+                            for it in er_b.items_sin_correspondencia
+                        ]
+                    )
+                    st.dataframe(df_un_b, use_container_width=True, hide_index=True)
+                else:
+                    st.success("0 ítems sin correspondencia.")
 
     with st.expander("📋 Ver tabla de ítems extraídos de la respuesta de cada modelo", expanded=False):
         c_left, c_right = st.columns(2)
@@ -555,7 +637,10 @@ def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = T
                 unsafe_allow_html=True,
             )
 
-    st.markdown(f"**🟥 Tic 2 — Dos puntos oracionales detectados ({res.total_dos_puntos}):**")
+    st.markdown(
+        f"**🟥 Tic 2 — Dos puntos oracionales (`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`) "
+        f"detectados ({res.total_dos_puntos}):**"
+    )
     if not res.dos_puntos_matches:
         st.success("Sin yuxtaposiciones oracionales con dos puntos.")
     else:
@@ -572,7 +657,9 @@ def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = T
                 f"<strong>{idx}.</strong> {html_colon}</div>",
                 unsafe_allow_html=True,
             )
-            st.caption(f"Verbos detectados tras `:` ({len(match.verbos_detectados_der)}): {verbos_badge}")
+            st.caption(
+                f"Verbos conjugados (forma finita) detectados tras `:` ({len(match.verbos_detectados_der)}): {verbos_badge}"
+            )
 
 
 def render_evaluator_tab() -> None:
@@ -762,8 +849,14 @@ def render_evaluator_tab() -> None:
                 min_value=0,
                 max_value=100,
             ),
-            "Detección errores (%)": st.column_config.ProgressColumn(
-                "Detección errores (%)",
+            "Cobertura (%)": st.column_config.ProgressColumn(
+                "Cobertura (%)",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100,
+            ),
+            "Precisión aprox. (%)": st.column_config.ProgressColumn(
+                "Precisión aprox. (%)",
                 format="%.1f%%",
                 min_value=0,
                 max_value=100,
@@ -796,7 +889,8 @@ def render_evaluator_tab() -> None:
         st.subheader("🔍 Evidencia cualitativa lado a lado (oraciones detectadas)")
         st.caption(
             "Nota: En amarillo se resalta el patrón de *reframing*; en rojo los dos puntos oracionales "
-            "y en verde los verbos conjugados (`VERB`/`AUX`) que validan la segunda proposición."
+            "(`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`) "
+            "y en verde los verbos conjugados (forma finita) que validan la segunda proposición."
         )
 
         ev_col_a, ev_col_b = st.columns(2)
