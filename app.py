@@ -31,8 +31,11 @@ importlib.reload(auditor)
 
 from auditor import (
     GROUND_TRUTH_META,
+    GROUND_TRUTH_META_FORMAL,
     META_DEMO_MODELO_A,
     META_DEMO_MODELO_B,
+    META_FORMAL_DEMO_MODELO_A,
+    META_FORMAL_DEMO_MODELO_B,
     PROMPTS_SUGERIDOS,
     SPACY_MODEL_NAME,
     TEXTO_DEMO_MODELO_A,
@@ -233,8 +236,12 @@ def init_session_state() -> None:
 def load_demo_texts() -> None:
     st.session_state["nombre_a"] = "Modelo A (ej. GPT-4o)"
     st.session_state["nombre_b"] = "Modelo B (ej. modelo pequeño / gratis)"
-    st.session_state["meta_input_a"] = META_DEMO_MODELO_A
-    st.session_state["meta_input_b"] = META_DEMO_MODELO_B
+    if "1B" in str(st.session_state.get("p1_subbanco", "")):
+        st.session_state["meta_input_a"] = META_FORMAL_DEMO_MODELO_A
+        st.session_state["meta_input_b"] = META_FORMAL_DEMO_MODELO_B
+    else:
+        st.session_state["meta_input_a"] = META_DEMO_MODELO_A
+        st.session_state["meta_input_b"] = META_DEMO_MODELO_B
     st.session_state["texto_a"] = TEXTO_DEMO_MODELO_A
     st.session_state["texto_b"] = TEXTO_DEMO_MODELO_B
     st.session_state["error_input_a"] = DEMO_RESPUESTA_ERRORES_MODELO_A
@@ -274,7 +281,9 @@ def render_about_tab() -> None:
 
         ### 1. Evaluación determinista en Python (sin otro LLM como juez)
         A diferencia de otros benchmarks que emplean un modelo de lenguaje para calificar las respuestas de otro (*LLM-as-a-judge*), **todas las evaluaciones de esta plataforma se ejecutan exclusivamente mediante código Python determinista y auditable**:
-        * **Prueba 1 (test metalingüístico de opción múltiple):** compara de forma estricta las respuestas emitidas por cada modelo (`A`, `B`, `C` o `D`) contra una clave fija (*ground truth*) basada en la *Nueva gramática de la lengua española* (RAE / ASALE).
+        * **Prueba 1 (test metalingüístico de opción múltiple, con dos sub-bancos seleccionables):**
+          1. **1A — Gramática normativa (RAE / ASALE):** compara de forma estricta las respuestas (`A`, `B`, `C` o `D`) contra una clave fija basada en la *Nueva gramática de la lengua española* (concordancia con partitivos, impersonales con *se*, queísmo/dequeísmo y gerundio de posterioridad).
+          2. **1B — Gramática formal y agramaticalidades (`*`):** evalúa fenómenos de sintaxis descriptiva y formal no prescriptiva donde los LLMs suelen fallar: distinción entre variación no normativa vs. agramaticalidad estructural (`*` por extracción de isla interrogativa-*wh*), inacusatividad vs. inergatividad en cláusulas absolutas de participio, Principio C de la teoría del ligamiento (mando-c) y alcance sintáctico de términos de polaridad negativa.
         * **Prueba 2 (auditoría estilística en prosa):** contabiliza y normaliza cada 500 palabras la densidad de dos tics sintáctico-retóricos frecuentes en textos generados por IA:
           1. *Reframing asindético y adversativo* (*«No es X, es Y»*, *«No se trata de X, se trata de Y»*, *«No era solo X, sino Y»*), detectado mediante expresiones regulares en Python.
           2. *Yuxtaposición explicativo-desarrolladora con dos puntos* (`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`), detectada mediante segmentación oracional y etiquetado morfosintáctico (*POS-tagging*) con la biblioteca **`spaCy` (`es_core_news_lg`)**, descartando listas, aposiciones nominales y segmentos con solo formas no personales.
@@ -307,7 +316,9 @@ def render_header_and_prompts() -> None:
             st.markdown(
                 """
                 1. **🧪 Prueba 1 — Test metalingüístico (opción múltiple Q1–Q4):**
-                   Evalúa precisión gramatical normativa (0 a 4 puntos) contra una clave fija (*ground truth*).
+                   Permite elegir entre dos sub-bancos (0 a 4 puntos contra clave fija):
+                   - **1A — Gramática normativa (RAE / ASALE):** concordancia con partitivos, impersonales con *se*, queísmo/dequeísmo y gerundio de posterioridad.
+                   - **1B — Gramática formal y agramaticalidades (`*`):** sintaxis descriptiva no normativa (islas interrogativas-*wh*, inacusatividad vs. inergatividad en cláusulas absolutas, Principio C de ligamiento por mando-c y alcance de polaridad negativa).
                 2. **✍️ Prueba 2 — Auditoría estilística en prosa (reframing + dos puntos):**
                    - **Tic 1 — Reframing asindético y adversativo (*«No es X, es Y»* / *«No era solo X, sino Y»*):** Fórmulas binarias donde se niega un término para reformularlo tras coma o punto y coma.
                    - **Tic 2 — Dos puntos oracionales (`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado en forma finita, descartando listas, aposiciones nominales e infinitivos/participios sueltos.
@@ -424,14 +435,23 @@ def render_error_benchmark_selector() -> tuple[str, tuple[PlantedError, ...] | N
     return texto_activo, errores_plantados
 
 
-def render_metalinguistic_comparison(res_a: ModelAuditResult, res_b: ModelAuditResult) -> None:
-    """Muestra la tabla comparativa pregunta por pregunta del test metalingüístico (Q1-Q4)."""
-    st.subheader("🧪 Desglose de la prueba 1: test metalingüístico (opción múltiple Q1–Q4)")
+def render_metalinguistic_comparison(
+    res_a: ModelAuditResult,
+    res_b: ModelAuditResult,
+    meta_gt: dict[str, dict] = GROUND_TRUTH_META,
+) -> None:
+    """Muestra la tabla comparativa pregunta por pregunta del test metalingüístico (Q1-Q4, sub-banco 1A o 1B)."""
+    sub_label = (
+        "1B: gramática formal y agramaticalidades (*)"
+        if meta_gt is GROUND_TRUTH_META_FORMAL
+        else "1A: gramática normativa (RAE / ASALE)"
+    )
+    st.subheader(f"🧪 Desglose de la prueba 1 ({sub_label})")
 
     rows = []
     for det_a, det_b in zip(res_a.meta.detalles, res_b.meta.detalles):
         q_key = det_a.question_id.lower()
-        enunciado = GROUND_TRUTH_META.get(q_key, {}).get("enunciado", "")
+        enunciado = meta_gt.get(q_key, {}).get("enunciado", "")
         icon_a = "✅" if det_a.es_correcta else "❌"
         icon_b = "✅" if det_b.es_correcta else "❌"
         rows.append(
@@ -883,10 +903,31 @@ def render_evaluator_tab() -> None:
     # ========================================================================
     # PROMPTS DE LAS PRUEBAS ACTIVAS (DEBAJO DE LOS INTERRUPTORES)
     # ========================================================================
+    meta_gt = GROUND_TRUTH_META
     if run_meta:
-        with st.expander("📋 Prompt 1 (Prueba 1): test metalingüístico (Q1–Q4)", expanded=False):
+        subbanco_label = st.radio(
+            "🧪 Sub-banco de la Prueba 1:",
+            options=[
+                "📘 1A: Gramática normativa (RAE / ASALE)",
+                "🧬 1B: Gramática formal y agramaticalidades (*) — no normativa",
+            ],
+            horizontal=True,
+            key="p1_subbanco",
+            help=(
+                "1A evalúa reglas normativas académicas (concordancia, 'se' impersonal, queísmo/dequeísmo, gerundio). "
+                "1B evalúa sintaxis descriptiva y formal no prescriptiva (islas sintácticas, inacusatividad, ligamiento y polaridad negativa)."
+            ),
+        )
+        if "1B" in subbanco_label:
+            meta_gt = GROUND_TRUTH_META_FORMAL
+            prompt_title = "📋 Prompt 1B (Prueba 1 — Gramática formal y agramaticalidades *): copiar prompt (Q1–Q4)"
+        else:
+            meta_gt = GROUND_TRUTH_META
+            prompt_title = "📋 Prompt 1A (Prueba 1 — Gramática normativa RAE): copiar prompt (Q1–Q4)"
+
+        with st.expander(prompt_title, expanded=False):
             st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro) y pégalo en ambos modelos:")
-            st.code(get_metalinguistic_prompt_text(), language=None, wrap_lines=True)
+            st.code(get_metalinguistic_prompt_text(meta_gt), language=None, wrap_lines=True)
 
     if run_style:
         col_p2, col_p3 = st.columns(2)
@@ -1067,6 +1108,7 @@ def render_evaluator_tab() -> None:
         run_style=run_style,
         run_errors=run_errors,
         run_custom=run_custom,
+        meta_ground_truth=meta_gt,
     )
 
     # 1. Tabla resumen general adaptada a las pruebas activas
@@ -1110,7 +1152,7 @@ def render_evaluator_tab() -> None:
     # 2. Si la Prueba 1 (opción múltiple) está activa, mostrar desglose pregunta por pregunta
     if run_meta:
         st.divider()
-        render_metalinguistic_comparison(results[0], results[1])
+        render_metalinguistic_comparison(results[0], results[1], meta_gt=meta_gt)
 
     # 3. Si la Prueba 3 (detección de errores) está activa, mostrar desglose claros vs sutiles
     if run_errors:

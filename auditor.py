@@ -108,6 +108,72 @@ GROUND_TRUTH_META: Final[dict[str, dict[str, Any]]] = {
     },
 }
 
+GROUND_TRUTH_META_FORMAL: Final[dict[str, dict[str, Any]]] = {
+    "q1": {
+        "pregunta": "Agramaticalidad estructural (*) vs. variación no normativa",
+        "enunciado": (
+            "En gramática descriptiva y formal se distingue entre variantes no normativas (sancionadas por la "
+            "academia pero producidas espontáneamente por hablantes nativos) y oraciones estructuralmente "
+            "agramaticales (*) que violan principios sintácticos profundos. ¿Cuál de las siguientes oraciones "
+            "es estrictamente AGRAMATICAL (*) en español y no una mera variante coloquial o no normativa?"
+        ),
+        "opciones": {
+            "A": "Habían demasiados estudiantes esperando en el pasillo de la facultad.",
+            "B": "¿Qué artículo me preguntaste quién había escrito para el congreso?",
+            "C": "La vecina que le presté el diccionario ayer todavía no me lo devolvió.",
+            "D": "Me alegro que hayas podido resolver el problema a tiempo.",
+        },
+        "respuesta_correcta": "B",
+    },
+    "q2": {
+        "pregunta": "Inacusatividad vs. inergatividad en cláusulas absolutas",
+        "enunciado": (
+            "Las construcciones absolutas de participio («Participio + sujeto posverbal») son gramaticales "
+            "con verbos inacusativos (cuyo sujeto se origina como argumento interno), pero resultan "
+            "agramaticales (*) con verbos inergativos puros (cuyo único argumento es externo/agente). "
+            "Según este principio estructural, ¿cuál de las siguientes oraciones es AGRAMATICAL (*)?"
+        ),
+        "opciones": {
+            "A": "Llegados los delegados extranjeros, comenzó la sesión plenaria.",
+            "B": "Ocurrido el accidente en la autopista, se desviaron todos los vehículos.",
+            "C": "Sonreídos los niños durante el acto, el director dio por finalizado el festejo.",
+            "D": "Nacidos los cachorros en primavera, el veterinario recomendó esperar un mes.",
+        },
+        "respuesta_correcta": "C",
+    },
+    "q3": {
+        "pregunta": "Teoría del ligamiento (Principio C) y mando-c",
+        "enunciado": (
+            "Según el Principio C de la teoría del ligamiento, una expresión referencial (como un nombre propio) "
+            "no puede ser correferente con un pronombre que la mande-c (c-command). ¿En cuál de las siguientes "
+            "oraciones es ESTRUCTURALMENTE IMPOSIBLE que el pronombre «él» (o «lo») y «Martín» refieran a la misma persona?"
+        ),
+        "opciones": {
+            "A": "Él aseguró en la reunión que Martín presentaría la renuncia mañana.",
+            "B": "Cuando él entró al aula, Martín saludó a todos los presentes.",
+            "C": "La profesora que lo dirigió en la tesis dijo que Martín ganaría la beca.",
+            "D": "Martín aseguró en la reunión que él presentaría la renuncia mañana.",
+        },
+        "respuesta_correcta": "A",
+    },
+    "q4": {
+        "pregunta": "Polaridad negativa y alcance sintáctico (mando-c)",
+        "enunciado": (
+            "Las expresiones de polaridad negativa estricta (como «pegar ojo» o «mover un dedo») requieren estar "
+            "bajo el mando-c directo de un inductor negativo o no verídico; si la negación está incrustada dentro "
+            "de una cláusula relativa que modifica al sujeto, no manda-c al predicado matriz. ¿Cuál de las siguientes "
+            "oraciones es AGRAMATICAL (*) por violar esta condición estructural?"
+        ),
+        "opciones": {
+            "A": "Ningún médico del hospital movió un dedo para evitar la sanción.",
+            "B": "Dudo que el acusado haya movido un dedo para ocultar las pruebas.",
+            "C": "Tampoco anoche pudo pegar ojo el paciente de la habitación contigua.",
+            "D": "El médico que no estuvo de guardia anoche pegó ojo durante toda la madrugada.",
+        },
+        "respuesta_correcta": "D",
+    },
+}
+
 PROMPTS_SUGERIDOS: Final[list[dict[str, str]]] = [
     {
         "titulo": "Opción 1: Comentario filológico y tradición textual",
@@ -129,6 +195,9 @@ PROMPTS_SUGERIDOS: Final[list[dict[str, str]]] = [
 
 META_DEMO_MODELO_A: Final[str] = '{"q1": "B", "q2": "C", "q3": "C", "q4": "B"}'
 META_DEMO_MODELO_B: Final[str] = '{"q1": "A", "q2": "C", "q3": "B", "q4": "B"}'
+
+META_FORMAL_DEMO_MODELO_A: Final[str] = '{"q1": "B", "q2": "C", "q3": "A", "q4": "D"}'
+META_FORMAL_DEMO_MODELO_B: Final[str] = '{"q1": "A", "q2": "C", "q3": "B", "q4": "D"}'
 
 TEXTO_DEMO_MODELO_A: Final[str] = (
     "La historia del comentario filológico atraviesa siglos de transformaciones silenciosas. "
@@ -157,14 +226,26 @@ TEXTO_DEMO_MODELO_B: Final[str] = (
 )
 
 
-def get_metalinguistic_prompt_text() -> str:
-    """Genera el texto completo del prompt para el test metalingüístico listo para copiar."""
+def get_metalinguistic_prompt_text(
+    ground_truth: dict[str, dict[str, Any]] = GROUND_TRUTH_META,
+) -> str:
+    """Genera el texto completo del prompt para el test metalingüístico (1A normativo o 1B formal) listo para copiar."""
+    if ground_truth is GROUND_TRUTH_META_FORMAL:
+        instruction = (
+            'Responde únicamente en formato JSON {"q1": "...", "q2": "...", "q3": "...", "q4": "..."} '
+            "seleccionando la opción correcta según los principios de la gramática formal y descriptiva "
+            "del español (juicios de agramaticalidad estructural *, inacusatividad, ligamiento y polaridad):"
+        )
+    else:
+        instruction = (
+            'Responde únicamente en formato JSON {"q1": "...", "q2": "...", "q3": "...", "q4": "..."} '
+            "seleccionando la opción gramaticalmente normativa según la NGLE de la RAE/ASALE:"
+        )
     lines = [
-        'Responde únicamente en formato JSON {"q1": "...", "q2": "...", "q3": "...", "q4": "..."} '
-        "seleccionando la opción gramaticalmente normativa según la NGLE de la RAE/ASALE:",
+        instruction,
         "",
     ]
-    for q_id, q_data in GROUND_TRUTH_META.items():
+    for q_id, q_data in ground_truth.items():
         lines.append(f"{q_id.upper()} ({q_data['pregunta']}): {q_data['enunciado']}")
         for opt_k, opt_v in q_data["opciones"].items():
             lines.append(f"  {opt_k}) {opt_v}")
@@ -1041,14 +1122,19 @@ def audit_text_in_memory(
     run_style: bool = True,
     run_errors: bool = False,
     run_custom: bool = False,
+    meta_ground_truth: dict[str, dict[str, Any]] = GROUND_TRUTH_META,
 ) -> ModelAuditResult:
     """
     Ejecuta las pruebas seleccionadas (`run_meta`, `run_style`, `run_errors`, `run_custom`) en memoria.
     """
     meta_result = (
-        evaluate_metalinguistic_answers(meta_answers)
+        evaluate_metalinguistic_answers(meta_answers, ground_truth=meta_ground_truth)
         if run_meta
-        else MetaEvaluationResult(puntaje_absoluto=0, total_preguntas=len(GROUND_TRUTH_META), precision_porcentaje=0.0)
+        else MetaEvaluationResult(
+            puntaje_absoluto=0,
+            total_preguntas=len(meta_ground_truth),
+            precision_porcentaje=0.0,
+        )
     )
 
     errores_res = (
@@ -1110,6 +1196,7 @@ def compare_models_in_memory(
     run_style: bool = True,
     run_errors: bool = False,
     run_custom: bool = False,
+    meta_ground_truth: dict[str, dict[str, Any]] = GROUND_TRUTH_META,
 ) -> tuple[pd.DataFrame, list[ModelAuditResult]]:
     """
     Recibe una lista de tuplas `(nombre_modelo, texto_ensayo, respuestas_meta, respuestas_errores[, respuestas_custom])`
@@ -1136,6 +1223,7 @@ def compare_models_in_memory(
                 run_style=run_style,
                 run_errors=run_errors,
                 run_custom=run_custom,
+                meta_ground_truth=meta_ground_truth,
             )
         )
 

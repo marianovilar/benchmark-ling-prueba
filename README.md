@@ -6,8 +6,9 @@ Aplicación interactiva en **Python + Streamlit** diseñada con propósitos peda
 
 ## ¿Qué evalúa? (Activables de forma independiente)
 
-1. **🧪 Prueba 1 — Test metalingüístico (opción múltiple Q1–Q4):**
-   Evaluación normativa (0 a 4 puntos) sobre concordancia de colectivos partitivos con atributo, impersonales con *se* y acusativo animado, queísmo/dequeísmo y gerundio de posterioridad.
+1. **🧪 Prueba 1 — Test metalingüístico (opción múltiple Q1–Q4, con dos sub-bancos seleccionables):**
+   - **1A — Gramática normativa (RAE / ASALE):** evaluación normativa (0 a 4 puntos) sobre concordancia de colectivos partitivos con atributo, impersonales con *se* y acusativo animado, queísmo/dequeísmo y gerundio de posterioridad.
+   - **1B — Gramática formal y agramaticalidades (`*`):** evaluación descriptiva no normativa sobre agramaticalidad estructural (`*` por extracción de isla interrogativa-*wh*) frente a variación no normativa, inacusatividad vs. inergatividad en cláusulas absolutas de participio, Principio C de la teoría del ligamiento (mando-c) y alcance sintáctico de términos de polaridad negativa.
 2. **✍️ Prueba 2 — Auditoría estilística en prosa (reframing + dos puntos):**
    - **Reframing asindético y adversativo (*«No es X, es Y»* / *«No era solo X, sino Y»*):** Detección mediante expresiones regulares de estructuras binarias adversativas yuxtapuestas por coma o punto y coma.
    - **Yuxtaposición explicativo-desarrolladora con dos puntos (`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`):** Detección morfosintáctica con **spaCy (`es_core_news_lg`)** que contabiliza únicamente las oraciones donde el segmento posterior a `:` supera los 3 tokens y contiene al menos un verbo conjugado en forma finita (`VERB`/`AUX` con `VerbForm=Fin`), descartando listas, aposiciones nominales y segmentos con solo infinitivos o participios.
