@@ -205,9 +205,9 @@ def init_session_state() -> None:
     if "run_meta" not in st.session_state:
         st.session_state["run_meta"] = True
     if "run_style" not in st.session_state:
-        st.session_state["run_style"] = True
+        st.session_state["run_style"] = False
     if "run_errors" not in st.session_state:
-        st.session_state["run_errors"] = True
+        st.session_state["run_errors"] = False
     if "run_custom" not in st.session_state:
         st.session_state["run_custom"] = False
     if "p4_num_q" not in st.session_state:
@@ -295,7 +295,9 @@ def render_about_tab() -> None:
 def render_header_and_prompts() -> None:
     st.markdown(
         "Compara dos modelos de lenguaje en español pegando sus respuestas lado a lado. "
-        "Puedes activar o desactivar libremente cualquiera de las **cuatro pruebas** según el objetivo de la clase."
+        "Puedes activar o desactivar libremente cualquiera de las **cuatro pruebas** según el objetivo de la clase. "
+        "**Este sitio requiere entrar por separado a las páginas web de los modelos que quieras probar, "
+        "copiar los prompts de cada prueba y pegar las respuestas obtenidas en las ventanas de texto correspondientes.**"
     )
 
     col_guide, col_links = st.columns(2)
@@ -332,21 +334,6 @@ def render_header_and_prompts() -> None:
                 * 🤗 **[HuggingChat](https://huggingface.co/chat/)** — Acceso a modelos abiertos variados (`Qwen`, `Cohere Command R`, `Llama`, `SmolLM`), aunque requiere iniciar sesión y tiene un límite gratuito muy restringido.
                 """
             )
-
-    # Ventanas separadas para los prompts de las pruebas 1 y 2
-    with st.expander("📋 Prompt 1: test metalingüístico (Q1–Q4)", expanded=False):
-        st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
-        st.code(get_metalinguistic_prompt_text(), language=None, wrap_lines=True)
-
-    col_p2, col_p3 = st.columns(2)
-    with col_p2:
-        with st.expander("📋 Prompt 2: ensayo sobre filología (opción 1)", expanded=False):
-            st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
-            st.code(PROMPTS_SUGERIDOS[0]["prompt"], language=None, wrap_lines=True)
-    with col_p3:
-        with st.expander("📋 Prompt 3: ensayo sobre IA y estilo (opción 2)", expanded=False):
-            st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
-            st.code(PROMPTS_SUGERIDOS[1]["prompt"], language=None, wrap_lines=True)
 
 
 def render_error_benchmark_selector() -> tuple[str, tuple[PlantedError, ...] | None]:
@@ -892,6 +879,25 @@ def render_evaluator_tab() -> None:
     if not run_meta and not run_style and not run_errors and not run_custom:
         st.warning("Activa al menos una de las cuatro pruebas con los interruptores de arriba para continuar.")
         return
+
+    # ========================================================================
+    # PROMPTS DE LAS PRUEBAS ACTIVAS (DEBAJO DE LOS INTERRUPTORES)
+    # ========================================================================
+    if run_meta:
+        with st.expander("📋 Prompt 1 (Prueba 1): test metalingüístico (Q1–Q4)", expanded=False):
+            st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro) y pégalo en ambos modelos:")
+            st.code(get_metalinguistic_prompt_text(), language=None, wrap_lines=True)
+
+    if run_style:
+        col_p2, col_p3 = st.columns(2)
+        with col_p2:
+            with st.expander("📋 Prompt 2 (Prueba 2): ensayo sobre filología (opción 1)", expanded=False):
+                st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
+                st.code(PROMPTS_SUGERIDOS[0]["prompt"], language=None, wrap_lines=True)
+        with col_p3:
+            with st.expander("📋 Prompt 3 (Prueba 2): ensayo sobre IA y estilo (opción 2)", expanded=False):
+                st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro):")
+                st.code(PROMPTS_SUGERIDOS[1]["prompt"], language=None, wrap_lines=True)
 
     planted_errors: tuple[PlantedError, ...] | None = None
     if run_errors:
