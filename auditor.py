@@ -174,6 +174,60 @@ GROUND_TRUTH_META_FORMAL: Final[dict[str, dict[str, Any]]] = {
     },
 }
 
+GROUND_TRUTH_VARIEDADES: Final[dict[str, dict[str, Any]]] = {
+    "q1": {
+        "pregunta": "Léxico regional platense («pollajería»)",
+        "enunciado": (
+            'La palabra "pollajería" para designar al lugar donde se puede comprar pollo y huevo corresponde a:'
+        ),
+        "opciones": {
+            "A": "Buenos Aires",
+            "B": "Concordia",
+            "C": "La Plata",
+            "D": "Montevideo",
+        },
+        "respuesta_correcta": "C",
+    },
+    "q2": {
+        "pregunta": "Léxico coloquial rioplatense («bondi»)",
+        "enunciado": 'El término "bondi" se utiliza para designar:',
+        "opciones": {
+            "A": "Un tren",
+            "B": "Un colectivo",
+            "C": "Un problema",
+            "D": "Una solución",
+        },
+        "respuesta_correcta": "B",
+    },
+    "q3": {
+        "pregunta": "Fraseología y lunfardo rioplatense",
+        "enunciado": (
+            '¿Cuál de estas expresiones no corresponde al lunfardo rioplatense para decir "no tengo dinero"?'
+        ),
+        "opciones": {
+            "A": "estoy corto de guita",
+            "B": "no tengo un mango partido al medio",
+            "C": "estoy seco",
+            "D": "me quedé sin un duro",
+        },
+        "respuesta_correcta": "D",
+    },
+    "q4": {
+        "pregunta": "Fonética y tonada cordobesa (alargamiento vocálico pretónico)",
+        "enunciado": (
+            'Si la frase "Yo soy cordobés" fuese pronunciada por un hablante de español oriundo de Córdoba '
+            '(Argentina), decime cuál sílaba alargaría de la palabra "cordobés":'
+        ),
+        "opciones": {
+            "A": "Cor-",
+            "B": "-do-",
+            "C": "-bés",
+            "D": "Ninguna, todas se pronuncian igual",
+        },
+        "respuesta_correcta": "B",
+    },
+}
+
 PROMPTS_SUGERIDOS: Final[list[dict[str, str]]] = [
     {
         "titulo": "Opción 1: Comentario filológico y tradición textual",
@@ -198,6 +252,9 @@ META_DEMO_MODELO_B: Final[str] = '{"q1": "A", "q2": "C", "q3": "B", "q4": "B"}'
 
 META_FORMAL_DEMO_MODELO_A: Final[str] = '{"q1": "B", "q2": "C", "q3": "A", "q4": "D"}'
 META_FORMAL_DEMO_MODELO_B: Final[str] = '{"q1": "A", "q2": "C", "q3": "B", "q4": "D"}'
+
+VARIEDADES_DEMO_MODELO_A: Final[str] = '{"q1": "C", "q2": "B", "q3": "D", "q4": "B"}'
+VARIEDADES_DEMO_MODELO_B: Final[str] = '{"q1": "A", "q2": "B", "q3": "D", "q4": "A"}'
 
 TEXTO_DEMO_MODELO_A: Final[str] = (
     "La historia del comentario filológico atraviesa siglos de transformaciones silenciosas. "
@@ -246,6 +303,21 @@ def get_metalinguistic_prompt_text(
         "",
     ]
     for q_id, q_data in ground_truth.items():
+        lines.append(f"{q_id.upper()} ({q_data['pregunta']}): {q_data['enunciado']}")
+        for opt_k, opt_v in q_data["opciones"].items():
+            lines.append(f"  {opt_k}) {opt_v}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def get_variedades_prompt_text() -> str:
+    """Genera el texto completo del prompt para la Prueba 4 (variedades rioplatense y cordobesa) listo para copiar."""
+    lines = [
+        'Responde únicamente en formato JSON {"q1": "...", "q2": "...", "q3": "...", "q4": "..."} '
+        "en base a tu conocimiento de las variedades del español de Argentina (variante rioplatense y variante cordobesa):",
+        "",
+    ]
+    for q_id, q_data in GROUND_TRUTH_VARIEDADES.items():
         lines.append(f"{q_id.upper()} ({q_data['pregunta']}): {q_data['enunciado']}")
         for opt_k, opt_v in q_data["opciones"].items():
             lines.append(f"  {opt_k}) {opt_v}")
@@ -385,6 +457,9 @@ class ModelAuditResult:
     dos_puntos_matches: list[ColonClauseMatch]
     densidad_dos_puntos_500w: float
     errores_result: ErrorDetectionResult = field(default_factory=ErrorDetectionResult)
+    variedades_result: MetaEvaluationResult = field(
+        default_factory=lambda: MetaEvaluationResult(0, 4, 0.0)
+    )
     custom_result: CustomTestResult = field(default_factory=CustomTestResult)
 
     @property
@@ -400,6 +475,7 @@ class ModelAuditResult:
         include_meta: bool = True,
         include_style: bool = True,
         include_errors: bool = False,
+        include_variedades: bool = False,
         include_custom: bool = False,
     ) -> dict[str, Any]:
         """Convierte el resultado al esquema dinámico según las pruebas activas."""
@@ -428,11 +504,14 @@ class ModelAuditResult:
                 )
                 row["Ítems sin correspondencia"] = len(self.errores_result.items_sin_correspondencia)
             row["Ítems reportados por el modelo"] = len(self.errores_result.items_extraidos)
+        if include_variedades:
+            row["Puntaje variedades (0-4)"] = self.variedades_result.puntaje_absoluto
+            row["Precisión variedades (%)"] = round(self.variedades_result.precision_porcentaje, 2)
         if include_custom and self.custom_result.evaluado:
-            row["Puntaje prueba 4"] = (
+            row["Puntaje prueba 5"] = (
                 f"{self.custom_result.puntaje_absoluto} / {self.custom_result.total_preguntas}"
             )
-            row["Precisión prueba 4 (%)"] = round(self.custom_result.precision_porcentaje, 1)
+            row["Precisión prueba 5 (%)"] = round(self.custom_result.precision_porcentaje, 1)
         return row
 
 
@@ -1116,16 +1195,18 @@ def audit_text_in_memory(
     meta_answers: str | dict[str, str] | None = None,
     error_response: str = "",
     planted_errors: tuple[PlantedError, ...] | None = None,
+    variedades_answers: str | dict[str, str] | None = None,
     custom_response: str = "",
     custom_specs: list[CustomQuestionSpec] | None = None,
     run_meta: bool = True,
     run_style: bool = True,
     run_errors: bool = False,
+    run_variedades: bool = False,
     run_custom: bool = False,
     meta_ground_truth: dict[str, dict[str, Any]] = GROUND_TRUTH_META,
 ) -> ModelAuditResult:
     """
-    Ejecuta las pruebas seleccionadas (`run_meta`, `run_style`, `run_errors`, `run_custom`) en memoria.
+    Ejecuta las pruebas seleccionadas (`run_meta`, `run_style`, `run_errors`, `run_variedades`, `run_custom`) en memoria.
     """
     meta_result = (
         evaluate_metalinguistic_answers(meta_answers, ground_truth=meta_ground_truth)
@@ -1141,6 +1222,16 @@ def audit_text_in_memory(
         evaluate_error_detection(error_response, planted_errors)
         if run_errors
         else ErrorDetectionResult()
+    )
+
+    variedades_res = (
+        evaluate_metalinguistic_answers(variedades_answers, ground_truth=GROUND_TRUTH_VARIEDADES)
+        if run_variedades
+        else MetaEvaluationResult(
+            puntaje_absoluto=0,
+            total_preguntas=len(GROUND_TRUTH_VARIEDADES),
+            precision_porcentaje=0.0,
+        )
     )
 
     custom_res = (
@@ -1161,6 +1252,7 @@ def audit_text_in_memory(
             dos_puntos_matches=[],
             densidad_dos_puntos_500w=0.0,
             errores_result=errores_res,
+            variedades_result=variedades_res,
             custom_result=custom_res,
         )
 
@@ -1183,6 +1275,7 @@ def audit_text_in_memory(
         dos_puntos_matches=colon_matches,
         densidad_dos_puntos_500w=densidad_dos_puntos,
         errores_result=errores_res,
+        variedades_result=variedades_res,
         custom_result=custom_res,
     )
 
@@ -1195,11 +1288,12 @@ def compare_models_in_memory(
     run_meta: bool = True,
     run_style: bool = True,
     run_errors: bool = False,
+    run_variedades: bool = False,
     run_custom: bool = False,
     meta_ground_truth: dict[str, dict[str, Any]] = GROUND_TRUTH_META,
 ) -> tuple[pd.DataFrame, list[ModelAuditResult]]:
     """
-    Recibe una lista de tuplas `(nombre_modelo, texto_ensayo, respuestas_meta, respuestas_errores[, respuestas_custom])`
+    Recibe una lista de tuplas `(nombre_modelo, texto_ensayo, respuestas_meta, respuestas_errores[, respuestas_custom[, respuestas_variedades]])`
     y devuelve el DataFrame comparativo adaptado a las pruebas activas y la lista de resultados.
     """
     results: list[ModelAuditResult] = []
@@ -1209,6 +1303,7 @@ def compare_models_in_memory(
         meta = entry[2] if len(entry) > 2 else None
         err_resp = entry[3] if len(entry) > 3 else ""
         cust_resp = entry[4] if len(entry) > 4 else ""
+        var_resp = entry[5] if len(entry) > 5 else ""
         results.append(
             audit_text_in_memory(
                 name,
@@ -1217,11 +1312,13 @@ def compare_models_in_memory(
                 meta,
                 error_response=err_resp,
                 planted_errors=planted_errors,
+                variedades_answers=var_resp,
                 custom_response=cust_resp,
                 custom_specs=custom_specs,
                 run_meta=run_meta,
                 run_style=run_style,
                 run_errors=run_errors,
+                run_variedades=run_variedades,
                 run_custom=run_custom,
                 meta_ground_truth=meta_ground_truth,
             )
@@ -1233,6 +1330,7 @@ def compare_models_in_memory(
                 include_meta=run_meta,
                 include_style=run_style,
                 include_errors=run_errors,
+                include_variedades=run_variedades,
                 include_custom=run_custom,
             )
             for r in results
@@ -1247,6 +1345,7 @@ def format_detailed_audit_log(
     run_meta: bool = True,
     run_style: bool = True,
     run_errors: bool = False,
+    run_variedades: bool = False,
     run_custom: bool = False,
 ) -> str:
     """Genera un informe detallado en texto plano según las pruebas activadas."""
@@ -1317,10 +1416,24 @@ def format_detailed_audit_log(
                     lines.append(f"  {item.numero}. {item.error_identificado} -> {item.correccion_propuesta}")
             lines.append("")
 
+        if run_variedades:
+            vr = res.variedades_result
+            lines.append(
+                f"[PRUEBA 4 - RECONOCIMIENTO DE VARIEDADES DEL ESPAÑOL]: "
+                f"{vr.puntaje_absoluto}/{vr.total_preguntas} ({vr.precision_porcentaje:.1f}%)"
+            )
+            for det_v in vr.detalles:
+                est_v = "CORRECTO" if det_v.es_correcta else "INCORRECTO"
+                lines.append(
+                    f"  - {det_v.question_id} ({det_v.pregunta}): "
+                    f"Modelo='{det_v.respuesta_modelo}' | Clave='{det_v.respuesta_esperada}' -> [{est_v}]"
+                )
+            lines.append("")
+
         if run_custom and res.custom_result.evaluado:
             cr = res.custom_result
             lines.append(
-                f"[PRUEBA 4 - PRUEBA CREADA EN CLASE]: "
+                f"[PRUEBA 5 - PRUEBA CREADA EN CLASE]: "
                 f"{cr.puntaje_absoluto}/{cr.total_preguntas} ({cr.precision_porcentaje:.1f}%)"
             )
             for det_c in cr.detalles:

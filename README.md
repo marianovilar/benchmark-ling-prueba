@@ -16,8 +16,10 @@ Aplicación interactiva en **Python + Streamlit** diseñada con propósitos peda
      $$\text{Densidad} = \left(\frac{\text{Ocurrencias}}{\text{Palabras totales}}\right) \times 500$$
 3. **🔎 Prueba 3 — Detección y corrección de errores en textos largos (~1000 palabras):**
    Evaluación uno a uno contra clave oficial (*ground truth*) sobre un banco de 3 textos extensos con errores **claros** (ortografía, homófonos, *haber* impersonal pluralizado) y **sutiles** (coma entre sujeto y verbo, dequeísmo, queísmo, quesuismo, gerundio de posterioridad o especificativo, paronimia), midiendo cobertura (*recall*), precisión aproximada e ítems sin correspondencia.
-4. **🛠️ Prueba 4 — Constructor de test en vivo para crear en clase:**
-   Permite que el docente y los estudiantes diseñen en el aula entre 1 y 5 preguntas propias (de opción múltiple `A/B/C/D` o de respuesta breve / reescritura con expresión clave), definan la respuesta correcta esperada, copien el prompt autogenerado (`Prompt 5`) y evalúen determinísticamente a ambos modelos desde cualquier navegador.
+4. **🧉 Prueba 4 — Reconocimiento de variedades del español (creada por estudiantes):**
+   Evaluación dialectal, léxica, fraseológica y prosódica (0 a 4 puntos) sobre variedades del español de Argentina (variante rioplatense/platense y tonada cordobesa).
+5. **🛠️ Prueba 5 — Constructor libre de test en vivo para crear en clase:**
+   Permite que el docente y los estudiantes diseñen en el aula entre 1 y 5 preguntas propias (de opción múltiple `A/B/C/D` con una o varias respuestas correctas, o de respuesta breve / reescritura con expresión clave), definan la respuesta esperada, copien el prompt autogenerado (`Prompt 6`) y evalúen determinísticamente a ambos modelos desde cualquier navegador.
 
 ## Cómo ejecutarlo online gratis (Streamlit Community Cloud)
 

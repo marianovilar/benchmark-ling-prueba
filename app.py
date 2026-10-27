@@ -32,6 +32,7 @@ importlib.reload(auditor)
 from auditor import (
     GROUND_TRUTH_META,
     GROUND_TRUTH_META_FORMAL,
+    GROUND_TRUTH_VARIEDADES,
     META_DEMO_MODELO_A,
     META_DEMO_MODELO_B,
     META_FORMAL_DEMO_MODELO_A,
@@ -40,12 +41,15 @@ from auditor import (
     SPACY_MODEL_NAME,
     TEXTO_DEMO_MODELO_A,
     TEXTO_DEMO_MODELO_B,
+    VARIEDADES_DEMO_MODELO_A,
+    VARIEDADES_DEMO_MODELO_B,
     CustomQuestionSpec,
     ModelAuditResult,
     build_custom_test_prompt,
     compare_models_in_memory,
     format_detailed_audit_log,
     get_metalinguistic_prompt_text,
+    get_variedades_prompt_text,
     load_spacy_model,
 )
 from textos_errores import (
@@ -201,6 +205,10 @@ def init_session_state() -> None:
         st.session_state["error_input_a"] = ""
     if "error_input_b" not in st.session_state:
         st.session_state["error_input_b"] = ""
+    if "variedades_input_a" not in st.session_state:
+        st.session_state["variedades_input_a"] = ""
+    if "variedades_input_b" not in st.session_state:
+        st.session_state["variedades_input_b"] = ""
     if "custom_input_a" not in st.session_state:
         st.session_state["custom_input_a"] = ""
     if "custom_input_b" not in st.session_state:
@@ -211,6 +219,8 @@ def init_session_state() -> None:
         st.session_state["run_style"] = False
     if "run_errors" not in st.session_state:
         st.session_state["run_errors"] = False
+    if "run_variedades" not in st.session_state:
+        st.session_state["run_variedades"] = False
     if "run_custom" not in st.session_state:
         st.session_state["run_custom"] = False
     if "p4_num_q" not in st.session_state:
@@ -246,6 +256,8 @@ def load_demo_texts() -> None:
     st.session_state["texto_b"] = TEXTO_DEMO_MODELO_B
     st.session_state["error_input_a"] = DEMO_RESPUESTA_ERRORES_MODELO_A
     st.session_state["error_input_b"] = DEMO_RESPUESTA_ERRORES_MODELO_B
+    st.session_state["variedades_input_a"] = VARIEDADES_DEMO_MODELO_A
+    st.session_state["variedades_input_b"] = VARIEDADES_DEMO_MODELO_B
     st.session_state["custom_input_a"] = '{"q1": "A"}'
     st.session_state["custom_input_b"] = '{"q1": "D"}'
 
@@ -259,6 +271,8 @@ def clear_texts() -> None:
     st.session_state["texto_b"] = ""
     st.session_state["error_input_a"] = ""
     st.session_state["error_input_b"] = ""
+    st.session_state["variedades_input_a"] = ""
+    st.session_state["variedades_input_b"] = ""
     st.session_state["custom_input_a"] = ""
     st.session_state["custom_input_b"] = ""
 
@@ -288,7 +302,8 @@ def render_about_tab() -> None:
           1. *Reframing asindético y adversativo* (*«No es X, es Y»*, *«No se trata de X, se trata de Y»*, *«No era solo X, sino Y»*), detectado mediante expresiones regulares en Python.
           2. *Yuxtaposición explicativo-desarrolladora con dos puntos* (`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`), detectada mediante segmentación oracional y etiquetado morfosintáctico (*POS-tagging*) con la biblioteca **`spaCy` (`es_core_news_lg`)**, descartando listas, aposiciones nominales y segmentos con solo formas no personales.
         * **Prueba 3 (detección y corrección de errores en textos largos):** verifica mediante reglas de coincidencia uno a uno en Python cuántos de los errores plantados en el texto de referencia (tanto errores **claros** de ortografía/concordancia como errores **sutiles** de puntuación, queísmo, dequeísmo, quesuismo, gerundios e impropiedades léxicas) fueron efectivamente identificados por cada modelo.
-        * **Prueba 4 (constructor en vivo para crear en clase):** permite que el docente y los estudiantes diseñen en el aula un test lingüístico propio (de opción múltiple `A/B/C/D` o de respuesta breve / reescritura con expresión clave), definan la respuesta correcta esperada, copien el prompt autogenerado y califiquen determinísticamente a ambos modelos desde cualquier navegador.
+        * **Prueba 4 (reconocimiento de variedades del español — creada por estudiantes):** evalúa el conocimiento dialectal, léxico, fraseológico y prosódico sobre variedades del español de Argentina (variante rioplatense/platense y tonada cordobesa).
+        * **Prueba 5 (constructor libre en vivo para crear en clase):** permite que el docente y los estudiantes diseñen en el aula un test lingüístico propio (de opción múltiple `A/B/C/D` con una o más respuestas válidas, o de respuesta breve / reescritura con expresión clave), definan la respuesta correcta esperada, copien el prompt autogenerado y califiquen determinísticamente a ambos modelos desde cualquier navegador.
 
         ---
 
@@ -304,7 +319,7 @@ def render_about_tab() -> None:
 def render_header_and_prompts() -> None:
     st.markdown(
         "Compara dos modelos de lenguaje en español pegando sus respuestas lado a lado. "
-        "Puedes activar o desactivar libremente cualquiera de las **cuatro pruebas** según el objetivo de la clase. "
+        "Puedes activar o desactivar libremente cualquiera de las **cinco pruebas** según el objetivo de la clase. "
         "**Este sitio requiere entrar por separado a las páginas web de los modelos que quieras probar, "
         "copiar los prompts de cada prueba y pegar las respuestas obtenidas en las ventanas de texto correspondientes.**"
     )
@@ -324,7 +339,9 @@ def render_header_and_prompts() -> None:
                    - **Tic 2 — Dos puntos oracionales (`[Oración con verbo] : [Oración con verbo conjugado (forma finita)]`):** Detecta con **spaCy** oraciones donde tras `:` hay más de 3 palabras y al menos un verbo conjugado en forma finita, descartando listas, aposiciones nominales e infinitivos/participios sueltos.
                 3. **🔎 Prueba 3 — Detección y corrección de errores en textos largos (~1000 palabras):**
                    Compara la lista de errores que encuentra el modelo contra una **clave oficial de errores plantados** (divididos en **claros** y **sutiles**).
-                4. **🛠️ Prueba 4 — Constructor de test en vivo para crear en clase:**
+                4. **🧉 Prueba 4 — Reconocimiento de variedades del español (creada por alumnos):**
+                   Evalúa el conocimiento léxico, fraseológico y prosódico sobre variedades del español de Argentina (variante rioplatense/platense y tonada cordobesa).
+                5. **🛠️ Prueba 5 — Constructor libre de test en vivo para crear en clase:**
                    Permite diseñar junto con los estudiantes un test lingüístico sencillo (de opción múltiple `A/B/C/D` o de respuesta breve / reescritura), fijar la respuesta correcta, autogenerar el prompt listo para copiar y calificar a ambos modelos en tiempo real.
                 """
             )
@@ -702,13 +719,37 @@ def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = T
             )
 
 
+def render_variedades_comparison(res_a: ModelAuditResult, res_b: ModelAuditResult) -> None:
+    """Muestra la tabla comparativa pregunta por pregunta de la Prueba 4 (variedades del español)."""
+    st.subheader("🧉 Desglose de la prueba 4: reconocimiento de variedades del español (rioplatense y cordobesa)")
+
+    rows = []
+    for det_a, det_b in zip(res_a.variedades_result.detalles, res_b.variedades_result.detalles):
+        q_key = det_a.question_id.lower()
+        enunciado = GROUND_TRUTH_VARIEDADES.get(q_key, {}).get("enunciado", "")
+        icon_a = "✅" if det_a.es_correcta else "❌"
+        icon_b = "✅" if det_b.es_correcta else "❌"
+        rows.append(
+            {
+                "Ítem": det_a.question_id,
+                "Fenómeno evaluado": det_a.pregunta,
+                "Enunciado": enunciado,
+                "Clave oficial": det_a.respuesta_esperada,
+                f"{res_a.modelo}": f"{icon_a} {det_a.respuesta_modelo}",
+                f"{res_b.modelo}": f"{icon_b} {det_b.respuesta_modelo}",
+            }
+        )
+
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
 def render_custom_test_builder() -> tuple[CustomQuestionSpec, ...]:
     """
-    Renderiza el constructor interactivo de la Prueba 4 para diseñar en clase
+    Renderiza el constructor interactivo de la Prueba 5 para diseñar en clase
     un test sencillo (de opción múltiple A/B/C/D o de respuesta breve / reescritura)
     y genera automáticamente el prompt listo para copiar.
     """
-    st.markdown("#### 🛠️ Configuración de la prueba 4: constructor de test lingüístico en clase")
+    st.markdown("#### 🛠️ Configuración de la prueba 5: constructor libre de test lingüístico en clase")
     st.caption(
         "Diseña aquí mismo junto con tus estudiantes entre 1 y 5 consignas lingüísticas, define la respuesta correcta "
         "y copia el prompt autogenerado sin necesidad de editar código ni usar un entorno de programación."
@@ -809,7 +850,7 @@ def render_custom_test_builder() -> tuple[CustomQuestionSpec, ...]:
                 )
 
     tuple_specs = tuple(specs)
-    with st.expander("📋 Prompt 5: prueba 4 creada en clase (listo para copiar)", expanded=True):
+    with st.expander("📋 Prompt 6 (Prueba 5): prueba creada en clase (listo para copiar)", expanded=True):
         st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro) y pégalo en ambos modelos:")
         st.code(build_custom_test_prompt(tuple_specs), language=None, wrap_lines=True)
 
@@ -817,8 +858,8 @@ def render_custom_test_builder() -> tuple[CustomQuestionSpec, ...]:
 
 
 def render_custom_test_comparison(res_a: ModelAuditResult, res_b: ModelAuditResult) -> None:
-    """Muestra la tabla comparativa pregunta por pregunta de la Prueba 4 creada en clase."""
-    st.subheader("🛠️ Desglose de la prueba 4: test creado en clase")
+    """Muestra la tabla comparativa pregunta por pregunta de la Prueba 5 creada en clase."""
+    st.subheader("🛠️ Desglose de la prueba 5: test creado en clase")
 
     cr_a = res_a.custom_result
     cr_b = res_b.custom_result
@@ -826,13 +867,13 @@ def render_custom_test_comparison(res_a: ModelAuditResult, res_b: ModelAuditResu
     m_col1, m_col2 = st.columns(2)
     with m_col1:
         st.metric(
-            f"Puntaje prueba 4 — {res_a.modelo}",
+            f"Puntaje prueba 5 — {res_a.modelo}",
             f"{cr_a.puntaje_absoluto}/{cr_a.total_preguntas}",
             f"{cr_a.precision_porcentaje:.1f}%",
         )
     with m_col2:
         st.metric(
-            f"Puntaje prueba 4 — {res_b.modelo}",
+            f"Puntaje prueba 5 — {res_b.modelo}",
             f"{cr_b.puntaje_absoluto}/{cr_b.total_preguntas}",
             f"{cr_b.precision_porcentaje:.1f}%",
         )
@@ -862,7 +903,9 @@ def render_evaluator_tab() -> None:
     # SELECTOR DE PRUEBAS ACTIVAS Y BOTONES DE DEMOSTRACIÓN
     # ========================================================================
     st.markdown("#### ⚙️ Selecciona qué pruebas deseas ejecutar:")
-    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5, ctrl6 = st.columns([2.1, 2.0, 2.2, 2.1, 1.0, 1.0])
+    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5, ctrl6, ctrl7 = st.columns(
+        [1.9, 1.7, 1.9, 2.0, 1.9, 0.9, 0.9]
+    )
     with ctrl1:
         run_meta = st.toggle(
             "🧪 Prueba 1: test metalingüístico",
@@ -879,25 +922,30 @@ def render_evaluator_tab() -> None:
             key="run_errors",
         )
     with ctrl4:
-        run_custom = st.toggle(
-            "🛠️ Prueba 4: crear en clase",
-            key="run_custom",
+        run_variedades = st.toggle(
+            "🧉 Prueba 4: variedades (AR)",
+            key="run_variedades",
         )
     with ctrl5:
+        run_custom = st.toggle(
+            "🛠️ Prueba 5: crear en clase",
+            key="run_custom",
+        )
+    with ctrl6:
         st.button(
             "✨ Ejemplo",
             on_click=load_demo_texts,
             use_container_width=True,
         )
-    with ctrl6:
+    with ctrl7:
         st.button(
             "🧹 Limpiar",
             on_click=clear_texts,
             use_container_width=True,
         )
 
-    if not run_meta and not run_style and not run_errors and not run_custom:
-        st.warning("Activa al menos una de las cuatro pruebas con los interruptores de arriba para continuar.")
+    if not run_meta and not run_style and not run_errors and not run_variedades and not run_custom:
+        st.warning("Activa al menos una de las cinco pruebas con los interruptores de arriba para continuar.")
         return
 
     # ========================================================================
@@ -945,6 +993,16 @@ def render_evaluator_tab() -> None:
         st.divider()
         _, planted_errors = render_error_benchmark_selector()
         st.divider()
+
+    if run_variedades:
+        with st.expander(
+            "📋 Prompt 5 (Prueba 4 — Variedades del español: rioplatense y cordobesa): copiar prompt (Q1–Q4)",
+            expanded=True,
+        ):
+            st.caption(
+                "Prueba diseñada por los estudiantes. Haz clic en el icono de copiar (esquina superior derecha del recuadro) y pégalo en ambos modelos:"
+            )
+            st.code(get_variedades_prompt_text(), language=None, wrap_lines=True)
 
     custom_specs: tuple[CustomQuestionSpec, ...] | None = None
     if run_custom:
@@ -998,12 +1056,26 @@ def render_evaluator_tab() -> None:
         else:
             error_input_a = ""
 
+        if run_variedades:
+            variedades_input_a = st.text_area(
+                "🧉 Respuestas de variedades del español (Prueba 4, Q1–Q4) — Modelo 1:",
+                key="variedades_input_a",
+                height=90,
+                help=(
+                    'Pega el JSON del modelo (ej: {"q1": "C", "q2": "B", "q3": "D", "q4": "B"}), '
+                    'o texto como "1: C, 2: B, 3: D, 4: B", o las 4 letras "C, B, D, B".'
+                ),
+                placeholder='Ej: {"q1": "C", "q2": "B", "q3": "D", "q4": "B"} o C, B, D, B',
+            )
+        else:
+            variedades_input_a = ""
+
         if run_custom:
             custom_input_a = st.text_area(
-                "🛠️ Respuestas de la prueba 4 (creada en clase) — Modelo 1:",
+                "🛠️ Respuestas de la prueba 5 (creada en clase) — Modelo 1:",
                 key="custom_input_a",
                 height=110,
-                placeholder='Pega aquí la respuesta del modelo 1 al Prompt 5 (ej: {"q1": "A"} o las respuestas numeradas)...',
+                placeholder='Pega aquí la respuesta del modelo 1 al Prompt 6 (ej: {"q1": "A"} o las respuestas numeradas)...',
             )
         else:
             custom_input_a = ""
@@ -1048,12 +1120,26 @@ def render_evaluator_tab() -> None:
         else:
             error_input_b = ""
 
+        if run_variedades:
+            variedades_input_b = st.text_area(
+                "🧉 Respuestas de variedades del español (Prueba 4, Q1–Q4) — Modelo 2:",
+                key="variedades_input_b",
+                height=90,
+                help=(
+                    'Pega el JSON del modelo (ej: {"q1": "A", "q2": "B", "q3": "D", "q4": "A"}), '
+                    'o texto como "1: A, 2: B, 3: D, 4: A", o las 4 letras "A, B, D, A".'
+                ),
+                placeholder='Ej: {"q1": "A", "q2": "B", "q3": "D", "q4": "A"} o A, B, D, A',
+            )
+        else:
+            variedades_input_b = ""
+
         if run_custom:
             custom_input_b = st.text_area(
-                "🛠️ Respuestas de la prueba 4 (creada en clase) — Modelo 2:",
+                "🛠️ Respuestas de la prueba 5 (creada en clase) — Modelo 2:",
                 key="custom_input_b",
                 height=110,
-                placeholder='Pega aquí la respuesta del modelo 2 al Prompt 5 (ej: {"q1": "D"} o las respuestas numeradas)...',
+                placeholder='Pega aquí la respuesta del modelo 2 al Prompt 6 (ej: {"q1": "D"} o las respuestas numeradas)...',
             )
         else:
             custom_input_b = ""
@@ -1076,6 +1162,8 @@ def render_evaluator_tab() -> None:
             texto_b,
             error_input_a,
             error_input_b,
+            variedades_input_a,
+            variedades_input_b,
             custom_input_a,
             custom_input_b,
         )
@@ -1098,8 +1186,22 @@ def render_evaluator_tab() -> None:
 
     df_summary, results = compare_models_in_memory(
         [
-            (nombre_a or "Modelo A", texto_a, meta_input_a, error_input_a, custom_input_a),
-            (nombre_b or "Modelo B", texto_b, meta_input_b, error_input_b, custom_input_b),
+            (
+                nombre_a or "Modelo A",
+                texto_a,
+                meta_input_a,
+                error_input_a,
+                custom_input_a,
+                variedades_input_a,
+            ),
+            (
+                nombre_b or "Modelo B",
+                texto_b,
+                meta_input_b,
+                error_input_b,
+                custom_input_b,
+                variedades_input_b,
+            ),
         ],
         nlp=nlp,
         planted_errors=planted_errors,
@@ -1107,6 +1209,7 @@ def render_evaluator_tab() -> None:
         run_meta=run_meta,
         run_style=run_style,
         run_errors=run_errors,
+        run_variedades=run_variedades,
         run_custom=run_custom,
         meta_ground_truth=meta_gt,
     )
@@ -1138,8 +1241,18 @@ def render_evaluator_tab() -> None:
                 min_value=0,
                 max_value=100,
             ),
-            "Precisión prueba 4 (%)": st.column_config.ProgressColumn(
-                "Precisión prueba 4 (%)",
+            "Puntaje variedades (0-4)": st.column_config.NumberColumn(
+                "Puntaje variedades (0-4)",
+                format="%d / 4",
+            ),
+            "Precisión variedades (%)": st.column_config.ProgressColumn(
+                "Precisión variedades (%)",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100,
+            ),
+            "Precisión prueba 5 (%)": st.column_config.ProgressColumn(
+                "Precisión prueba 5 (%)",
                 format="%.1f%%",
                 min_value=0,
                 max_value=100,
@@ -1159,12 +1272,17 @@ def render_evaluator_tab() -> None:
         st.divider()
         render_error_detection_comparison(results[0], results[1])
 
-    # 4. Si la Prueba 4 (creada en clase) está activa, mostrar desglose pregunta por pregunta
+    # 4. Si la Prueba 4 (variedades del español) está activa, mostrar desglose pregunta por pregunta
+    if run_variedades:
+        st.divider()
+        render_variedades_comparison(results[0], results[1])
+
+    # 5. Si la Prueba 5 (creada en clase) está activa, mostrar desglose pregunta por pregunta
     if run_custom:
         st.divider()
         render_custom_test_comparison(results[0], results[1])
 
-    # 5. Si la Prueba 2 (estilometría) está activa, mostrar gráfico de barras y visor cualitativo
+    # 6. Si la Prueba 2 (estilometría) está activa, mostrar gráfico de barras y visor cualitativo
     if run_style:
         st.divider()
         st.subheader("📈 Comparativa de densidad de tics sintácticos (cada 500 palabras)")
@@ -1187,7 +1305,7 @@ def render_evaluator_tab() -> None:
         with ev_col_b:
             render_model_evidence_card(results[1], show_meta_metric=run_meta)
 
-    # 6. Botones de descarga en memoria
+    # 7. Botones de descarga en memoria
     st.divider()
     dl1, dl2 = st.columns(2)
     with dl1:
@@ -1205,6 +1323,7 @@ def render_evaluator_tab() -> None:
             run_meta=run_meta,
             run_style=run_style,
             run_errors=run_errors,
+            run_variedades=run_variedades,
             run_custom=run_custom,
         )
         st.download_button(
