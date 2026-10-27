@@ -31,6 +31,16 @@ Aplicación interactiva en **Python + Streamlit** diseñada con propósitos peda
    - **Main file path:** `app.py`
 4. Haz clic en **"Deploy!"**.
 
+## Versión web estática (GitHub Pages, sin servidor)
+
+`index.html` publica la misma `app.py` como página estática: [stlite](https://github.com/whitphx/stlite) ejecuta Streamlit dentro del navegador con Pyodide. Sirve para redes que bloquean `*.streamlit.app` (por ejemplo, con inspección SSL de Cisco Umbrella).
+
+1. En GitHub: **Settings → Pages → Build and deployment → Source: Deploy from a branch**.
+2. Elegí la rama `main` y la carpeta `/ (root)`, y guardá.
+3. La app queda en `https://marianovilar.github.io/benchmark-ling-prueba/`. La primera carga tarda unos segundos porque el navegador descarga Python.
+
+Diferencia con la versión de Streamlit: spaCy (`es_core_news_lg`, ~550 MB) no puede ejecutarse en el navegador, así que la detección de dos puntos de la Prueba 2 usa `nlp_ligero.py`, un etiquetador heurístico basado en un léxico de formas verbales (`datos/lexico_verbal_es.json.gz`, generado con `scripts/generar_lexico_verbal.py` desde `spacy-lookups-data`, licencia MIT) y reglas de contexto. Es menos preciso que spaCy con homógrafos verbo/sustantivo («cuenta», «costo»). El resto de las pruebas funciona igual.
+
 ## Ejecución local y tests
 
 ```bash

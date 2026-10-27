@@ -18,16 +18,22 @@ import html
 import importlib
 import re
 
+from typing import TYPE_CHECKING
+
 import pandas as pd
 import streamlit as st
-from spacy.language import Language
 
 import textos_errores
+import nlp_ligero
 import auditor
 
 # Recargar módulos para evitar que Streamlit Cloud conserve versiones en caché tras un git push
 importlib.reload(textos_errores)
+importlib.reload(nlp_ligero)
 importlib.reload(auditor)
+
+if TYPE_CHECKING:
+    from spacy.language import Language
 
 from auditor import (
     GROUND_TRUTH_META,
@@ -1183,6 +1189,12 @@ def render_evaluator_tab() -> None:
         except RuntimeError as exc:
             st.error(str(exc))
             st.stop()
+        if model_loaded == nlp_ligero.NOMBRE_MODELO_LIGERO:
+            st.info(
+                "ℹ️ **Versión web:** spaCy no puede ejecutarse en el navegador, así que la detección de "
+                "dos puntos de la Prueba 2 usa un etiquetador heurístico (léxico de formas verbales + reglas "
+                "de contexto). Puede diferir levemente de la versión con spaCy (`es_core_news_lg`)."
+            )
 
     df_summary, results = compare_models_in_memory(
         [

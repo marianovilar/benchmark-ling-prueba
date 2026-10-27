@@ -17,13 +17,21 @@ import json
 import re
 import subprocess
 import sys
-from typing import Any, Final, Pattern
+from typing import TYPE_CHECKING, Any, Final, Pattern
 import unicodedata
 
 import pandas as pd
-import spacy
-from spacy.language import Language
-from spacy.tokens import Doc, Span
+
+try:
+    import spacy
+except ImportError:  # Versión web (stlite/Pyodide): spaCy no puede ejecutarse en el navegador
+    spacy = None
+
+import nlp_ligero
+
+if TYPE_CHECKING:
+    from spacy.language import Language
+    from spacy.tokens import Doc, Span
 
 from textos_errores import (
     TEXTO_1_CONTENIDO,
@@ -524,7 +532,11 @@ def load_spacy_model(preferred_model: str = SPACY_MODEL_NAME) -> tuple[Language,
     """
     Carga el modelo de spaCy (`es_core_news_lg`).
     Si no está instalado localmente, intenta descargarlo automáticamente.
+    Si spaCy no está disponible (versión web en el navegador), usa el analizador heurístico de `nlp_ligero`.
     """
+    if spacy is None:
+        return nlp_ligero.load(), nlp_ligero.NOMBRE_MODELO_LIGERO
+
     candidates = [preferred_model] + [m for m in SPACY_FALLBACK_MODELS if m != preferred_model]
     for model_name in candidates:
         try:
