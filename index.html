@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Benchmark en vivo: evaluación metalingüística y estilometría de LLMs</title>
+    <!--
+      Versión web estática (GitHub Pages) de app.py: stlite ejecuta Streamlit dentro del navegador
+      con Pyodide, sin servidor. spaCy no está disponible en el navegador, así que la Prueba 2 usa
+      nlp_ligero.py (ver auditor.load_spacy_model).
+    -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@1.10.0/build/stlite.css" />
+  </head>
+  <body>
+    <noscript>Esta aplicación necesita JavaScript habilitado.</noscript>
+    <div id="root"></div>
+    <script type="module">
+      import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.10.0/build/stlite.js";
+
+      const archivo = (ruta) => ({ url: new URL(ruta, window.location.href).href });
+
+      mount(
+        {
+          requirements: ["pandas"],
+          entrypoint: "app.py",
+          files: {
+            "app.py": archivo("app.py"),
+            "auditor.py": archivo("auditor.py"),
+            "textos_errores.py": archivo("textos_errores.py"),
+            "nlp_ligero.py": archivo("nlp_ligero.py"),
+            "datos/lexico_verbal_es.json.gz": archivo("datos/lexico_verbal_es.json.gz"),
+          },
+        },
+        document.getElementById("root"),
+      );
+    </script>
+  </body>
+</html>

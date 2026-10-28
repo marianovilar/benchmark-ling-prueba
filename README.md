@@ -15,7 +15,7 @@ Aplicación interactiva en **Python + Streamlit** diseñada con propósitos peda
    - **Densidad normalizada cada 500 palabras:**
      $$\text{Densidad} = \left(\frac{\text{Ocurrencias}}{\text{Palabras totales}}\right) \times 500$$
 3. **🔎 Prueba 3 — Detección y corrección de errores en textos largos (~1000 palabras):**
-   Evaluación uno a uno contra clave oficial (*ground truth*) sobre un banco de 3 textos extensos con errores **claros** (ortografía, homófonos, *haber* impersonal pluralizado) y **sutiles** (coma entre sujeto y verbo, dequeísmo, queísmo, quesuismo, gerundio de posterioridad o especificativo, paronimia), midiendo cobertura (*recall*), precisión aproximada e ítems sin correspondencia.
+   Evaluación uno a uno contra clave oficial (*ground truth*) sobre un banco de 3 textos extensos con errores **claros** (ortografía, homófonos, *haber* impersonal pluralizado) y **sutiles** (coma entre sujeto y verbo, dequeísmo, queísmo, quesuismo, gerundio de posterioridad o especificativo, paronimia), midiendo cobertura (*recall*), errores **bien corregidos** (la corrección propuesta debe eliminar el error y coincidir con una forma aceptada), precisión aproximada e ítems sin correspondencia. Acepta la lista en el formato pedido, tablas Markdown, bloques `Original: … / Corrección: …` o el texto completo corregido (comparado párrafo por párrafo con el original).
 4. **🧉 Prueba 4 — Reconocimiento de variedades del español (creada por estudiantes):**
    Evaluación dialectal, léxica, fraseológica y prosódica (0 a 4 puntos) sobre variedades del español de Argentina (variante rioplatense/platense y tonada cordobesa).
 5. **🛠️ Prueba 5 — Constructor libre de test en vivo para crear en clase:**
@@ -30,6 +30,16 @@ Aplicación interactiva en **Python + Streamlit** diseñada con propósitos peda
    - **Branch:** `main`
    - **Main file path:** `app.py`
 4. Haz clic en **"Deploy!"**.
+
+## Versión web estática (GitHub Pages, sin servidor)
+
+`index.html` publica la misma `app.py` como página estática: [stlite](https://github.com/whitphx/stlite) ejecuta Streamlit dentro del navegador con Pyodide. Sirve para redes que bloquean `*.streamlit.app` (por ejemplo, con inspección SSL de Cisco Umbrella).
+
+1. En GitHub: **Settings → Pages → Build and deployment → Source: Deploy from a branch**.
+2. Elegí la rama `main` y la carpeta `/ (root)`, y guardá.
+3. La app queda en `https://marianovilar.github.io/benchmark-ling-prueba/`. La primera carga tarda unos segundos porque el navegador descarga Python.
+
+Diferencia con la versión de Streamlit: spaCy (`es_core_news_lg`, ~550 MB) no puede ejecutarse en el navegador, así que la detección de dos puntos de la Prueba 2 usa `nlp_ligero.py`, un etiquetador heurístico basado en un léxico de formas verbales (`datos/lexico_verbal_es.json.gz`, generado con `scripts/generar_lexico_verbal.py` desde `spacy-lookups-data`, licencia MIT) y reglas de contexto. Es menos preciso que spaCy con homógrafos verbo/sustantivo («cuenta», «costo»). El resto de las pruebas funciona igual.
 
 ## Ejecución local y tests
 
