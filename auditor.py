@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+import difflib
 import json
 import re
 import subprocess
@@ -396,6 +397,8 @@ class PlantedErrorMatchDetail:
     error_plantado: PlantedError
     detectado: bool
     evidencia_modelo: str
+    # True: corrección válida | False: detectado pero mal corregido | None: sin verificar (o no detectado)
+    corregido: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -415,6 +418,11 @@ class ErrorDetectionResult:
     sutiles_detectados: int = 0
     detalles_plantados: list[PlantedErrorMatchDetail] = field(default_factory=list)
     aviso_formato: bool = False
+    corregidos_total: int = 0
+    correccion_porcentaje: float = 0.0
+    sin_verificar_total: int = 0
+    # El modelo devolvió el texto completo corregido en lugar de una lista: se comparó párrafo por párrafo
+    texto_reescrito: bool = False
 
 
 @dataclass(frozen=True)
@@ -503,6 +511,10 @@ class ModelAuditResult:
                     f"{self.errores_result.detectados_total} / {self.errores_result.total_plantados}"
                 )
                 row["Cobertura (%)"] = round(self.errores_result.cobertura_porcentaje, 1)
+                row["Errores bien corregidos"] = (
+                    f"{self.errores_result.corregidos_total} / {self.errores_result.total_plantados}"
+                )
+                row["Corrección (%)"] = round(self.errores_result.correccion_porcentaje, 1)
                 row["Precisión aprox. (%)"] = round(self.errores_result.precision_aprox_porcentaje, 1)
                 row["Claros detectados"] = (
                     f"{self.errores_result.claros_detectados} / {self.errores_result.claros_total}"
@@ -780,11 +792,112 @@ def normalize_error_text(text: str) -> str:
     return norm
 
 
-_NORMALIZED_SOURCE_TEXTS: Final[tuple[str, ...]] = (
-    normalize_error_text(TEXTO_1_CONTENIDO),
-    normalize_error_text(TEXTO_2_CONTENIDO),
-    normalize_error_text(TEXTO_3_CONTENIDO),
+_SOURCE_TEXTS: Final[tuple[str, ...]] = (TEXTO_1_CONTENIDO, TEXTO_2_CONTENIDO, TEXTO_3_CONTENIDO)
+_NORMALIZED_SOURCE_TEXTS: Final[tuple[str, ...]] = tuple(normalize_error_text(t) for t in _SOURCE_TEXTS)
+_NORMALIZED_SOURCE_PARAGRAPHS: Final[tuple[tuple[str, ...], ...]] = tuple(
+    tuple(normalize_error_text(p) for p in re.split(r"\n\s*\n", t) if p.strip()) for t in _SOURCE_TEXTS
 )
+
+# Mínimo de caracteres para aceptar una cita más corta que las anclas («habían», «infringir»)
+MIN_CITA_CORTA: Final[int] = 4
+# Similitud mínima (difflib) para considerar que una línea es un párrafo del texto fuente reescrito por el modelo
+MIN_SIMILITUD_PARRAFO: Final[float] = 0.75
+
+# Rótulos del formato en varias líneas («Original: … / Corrección: … / Explicación: …»)
+_PATRON_ROTULO: Final[Pattern[str]] = re.compile(
+    r"^(?P<rotulo>texto original|frase original|fragmento original|original|fragmento|error|incorrecto|dice"
+    r"|corrección|correccion|corregido|correcto|forma correcta|debe decir|sugerencia|propuesta"
+    r"|explicación|explicacion|motivo|justificación|justificacion|razón|razon|tipo de error|tipo)\s*:\s*(?P<valor>.*)$",
+    re.IGNORECASE,
+)
+_ROTULOS_ERROR: Final[frozenset[str]] = frozenset(
+    {"texto original", "frase original", "fragmento original", "original", "fragmento", "error", "incorrecto", "dice"}
+)
+_ROTULOS_CORRECCION: Final[frozenset[str]] = frozenset(
+    {"corrección", "correccion", "corregido", "correcto", "forma correcta", "debe decir", "sugerencia", "propuesta"}
+)
+# Encabezados sueltos de cada ítem en el formato en varias líneas («**Error 1**», «### 2.»)
+_PATRON_ENCABEZADO_ITEM: Final[Pattern[str]] = re.compile(r"^(?:error|ítem|item|corrección)?\s*n?[º°]?\s*\d+\s*[\.\):]?$", re.IGNORECASE)
+_PATRON_SEPARADOR_TABLA: Final[Pattern[str]] = re.compile(r"^\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?$")
+
+
+def _strip_markdown_marks(line: str) -> str:
+    """Quita marcas de lista, encabezados y negritas que no forman parte del contenido."""
+    clean = re.sub(r"^\s*(?:#{1,6}\s*|[-*•]\s+|\d+[\.\)]\s+)", "", line)
+    return clean.replace("**", "").replace("__", "").strip()
+
+
+def _merge_labeled_blocks(lines: list[str]) -> list[str]:
+    """
+    Une el formato en varias líneas (`Original: "X"` / `Corrección: "Y"` / `Explicación: Z`) en líneas
+    del formato estándar `"X" -> "Y" | Z`. Si no hay bloques rotulados, devuelve las líneas sin cambios.
+    """
+    rotuladas = [_PATRON_ROTULO.match(_strip_markdown_marks(line)) for line in lines]
+    hay_pares = any(m and m.group("rotulo").lower() in _ROTULOS_ERROR for m in rotuladas) and any(
+        m and m.group("rotulo").lower() in _ROTULOS_CORRECCION for m in rotuladas
+    )
+    if not hay_pares:
+        return lines
+
+    merged: list[str] = []
+    actual: dict[str, str] = {}
+
+    def cerrar() -> None:
+        if actual.get("error"):
+            linea = f'"{actual["error"]}" -> "{actual.get("correccion", "")}"'
+            if actual.get("explicacion"):
+                linea += f' | {actual["explicacion"]}'
+            merged.append(linea)
+        actual.clear()
+
+    for line, m in zip(lines, rotuladas):
+        if m is None:
+            if _PATRON_ENCABEZADO_ITEM.match(_strip_markdown_marks(line)):
+                cerrar()
+            else:
+                merged.append(line)
+            continue
+        rotulo = m.group("rotulo").lower()
+        valor = m.group("valor").strip()
+        if rotulo in _ROTULOS_ERROR:
+            cerrar()
+            actual["error"] = valor.strip(" \"'“”‘’«»*`")
+        elif rotulo in _ROTULOS_CORRECCION:
+            actual["correccion"] = valor.strip(" \"'“”‘’«»*`")
+        else:
+            actual["explicacion"] = valor
+    cerrar()
+    return merged
+
+
+def _table_rows_to_lines(lines: list[str]) -> list[str]:
+    """
+    Convierte filas de una tabla Markdown (`| error | corrección | explicación |`) al formato estándar
+    `"error" -> "corrección" | explicación`, descartando el encabezado y la fila separadora.
+    """
+    if not any(_PATRON_SEPARADOR_TABLA.match(line.strip()) for line in lines):
+        return lines
+    converted: list[str] = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            converted.append(line)
+            continue
+        if _PATRON_SEPARADOR_TABLA.match(stripped):
+            continue
+        if i + 1 < len(lines) and _PATRON_SEPARADOR_TABLA.match(lines[i + 1].strip()):
+            continue  # Fila de encabezado
+        celdas = [c.strip() for c in stripped.strip("|").split("|")]
+        if celdas and re.fullmatch(r"\d+[\.\)]?", celdas[0]):
+            celdas = celdas[1:]
+        if len(celdas) < 2:
+            converted.append(line)
+            continue
+        linea = f'"{_strip_markdown_marks(celdas[0])}" -> "{_strip_markdown_marks(celdas[1])}"'
+        if len(celdas) > 2 and any(celdas[2:]):
+            linea += " | " + " ".join(c for c in celdas[2:] if c)
+        converted.append(linea)
+    return converted
 
 
 def _is_copied_source_paragraph(line: str) -> bool:
@@ -796,6 +909,88 @@ def _is_copied_source_paragraph(line: str) -> bool:
     if len(norm_line) >= 60 and any(norm_line in src for src in _NORMALIZED_SOURCE_TEXTS):
         return True
     return False
+
+
+def _match_rewritten_source_paragraph(line: str) -> str | None:
+    """
+    Si la línea es un párrafo del texto fuente reescrito (corregido) por el modelo, devuelve el párrafo
+    original normalizado; si no, `None`.
+    """
+    norm_line = normalize_error_text(line)
+    if len(norm_line) < 80:
+        return None
+    mejor, mejor_ratio = None, MIN_SIMILITUD_PARRAFO
+    for parrafos in _NORMALIZED_SOURCE_PARAGRAPHS:
+        for parrafo in parrafos:
+            matcher = difflib.SequenceMatcher(None, norm_line, parrafo, autojunk=False)
+            if matcher.real_quick_ratio() < mejor_ratio or matcher.quick_ratio() < mejor_ratio:
+                continue
+            ratio = matcher.ratio()
+            if ratio >= mejor_ratio:
+                mejor, mejor_ratio = parrafo, ratio
+    return mejor
+
+
+def _find_source_text(planted_errors: tuple[PlantedError, ...]) -> str | None:
+    """Devuelve el texto del banco (normalizado) que contiene las anclas de los errores plantados."""
+    for src in _NORMALIZED_SOURCE_TEXTS:
+        if all(any(normalize_error_text(a) in src for a in pe.anclas) for pe in planted_errors):
+            return src
+    return None
+
+
+def _contains_whole(haystack: str, needle: str) -> bool:
+    """Busca `needle` en `haystack` respetando límites de palabra en los extremos alfanuméricos."""
+    if not needle:
+        return False
+    pattern = re.escape(needle)
+    if needle[0].isalnum():
+        pattern = r"(?<!\w)" + pattern
+    if needle[-1].isalnum():
+        pattern += r"(?!\w)"
+    return re.search(pattern, haystack) is not None
+
+
+def _count_whole(haystack: str, needle: str) -> int:
+    pattern = re.escape(needle)
+    if needle and needle[0].isalnum():
+        pattern = r"(?<!\w)" + pattern
+    if needle and needle[-1].isalnum():
+        pattern += r"(?!\w)"
+    return len(re.findall(pattern, haystack))
+
+
+def _is_short_quote_of(target_norm: str, p_err: PlantedError, source_norm: str | None, planted: tuple[PlantedError, ...]) -> bool:
+    """
+    Acepta citas más cortas que las anclas («habían», «infringir») si la cita está dentro de un ancla
+    del error y no es ambigua: aparece una sola vez en el texto fuente (o en un solo error plantado
+    cuando el texto es propio del docente).
+    """
+    if len(target_norm) < MIN_CITA_CORTA:
+        return False
+    if not any(_contains_whole(normalize_error_text(a), target_norm) for a in p_err.anclas):
+        return False
+    if source_norm is not None:
+        return _count_whole(source_norm, target_norm) == 1
+    return sum(1 for pe in planted if _contains_whole(normalize_error_text(pe.fragmento_erroneo), target_norm)) == 1
+
+
+def _is_valid_correction(p_err: PlantedError, target_norm: str, corr_norm: str) -> bool | None:
+    """
+    Verifica la corrección propuesta para un error plantado:
+    - `None` si la clave no trae formas corregidas con qué comparar.
+    - `False` si la corrección está vacía o todavía contiene el error (alguna de sus anclas).
+    - `True` si, al aplicar la corrección sobre el fragmento erróneo, aparece una de las formas aceptadas.
+    """
+    if not p_err.correcciones:
+        return None
+    if not corr_norm:
+        return False
+    if any(normalize_error_text(a) in corr_norm for a in p_err.anclas):
+        return False
+    fragmento = normalize_error_text(p_err.fragmento_erroneo)
+    reconstruido = fragmento.replace(target_norm, corr_norm, 1) if target_norm and target_norm in fragmento else corr_norm
+    return any(normalize_error_text(c) in reconstruido for c in p_err.correcciones)
 
 
 def _parse_single_line_as_item(line: str, numero: int) -> ParsedErrorCorrection:
@@ -848,13 +1043,15 @@ def parse_error_correction_list(raw_response: str) -> list[ParsedErrorCorrection
     """
     Parsea la lista numerada o con viñetas devuelta por el LLM con los errores y correcciones.
     Soporta tanto el formato estructurado (`1. "error" -> "corrección" | explicación`) como
-    variantes con flechas (`->`, `→`, `=>`, `—>`, `por:`, `corrección:`).
+    variantes con flechas (`->`, `→`, `=>`, `—>`, `por:`, `corrección:`), tablas Markdown y bloques
+    en varias líneas (`Original: … / Corrección: … / Explicación: …`).
     """
     if not raw_response or not raw_response.strip():
         return []
 
     items: list[ParsedErrorCorrection] = []
     lines = [line.strip() for line in raw_response.strip().splitlines() if line.strip()]
+    lines = _merge_labeled_blocks(_table_rows_to_lines(lines))
 
     for line in lines:
         list_match = re.match(r"^(?:(\d+)[\.\)\-\:]|\-|\*|\•)\s*(.+)$", line)
@@ -879,6 +1076,10 @@ def evaluate_error_detection(
     - Si el parser no extrae ítems de una respuesta no vacía, trata cada línea no vacía
       como un ítem (descartando párrafos copiados literalmente del texto fuente) y activa `aviso_formato=True`.
     - Asignación uno a uno entre ítems y errores plantados mediante `anclas` y desempate por `correcciones`.
+    - Acepta citas más cortas que las anclas si no son ambiguas en el texto fuente («habían» -> «había»).
+    - Verifica por separado la corrección: aplicada sobre el fragmento erróneo debe eliminar el error
+      y producir una de las `correcciones` aceptadas (`corregido` True/False, o None si no se puede verificar).
+    - Si el modelo devolvió el texto completo corregido, compara cada párrafo reescrito con el original.
     """
     if not raw_model_response or not raw_model_response.strip():
         if not planted_errors:
@@ -902,15 +1103,20 @@ def evaluate_error_detection(
 
     parsed_items = parse_error_correction_list(raw_model_response)
     aviso_formato = False
+    # Párrafos del texto fuente reescritos por el modelo: (línea del modelo, párrafo original normalizado)
+    parrafos_reescritos: list[tuple[str, str]] = []
 
     if not parsed_items:
         aviso_formato = True
         raw_lines = [line.strip() for line in raw_model_response.strip().splitlines() if line.strip()]
-        parsed_items = [
-            _parse_single_line_as_item(line, idx)
-            for idx, line in enumerate(raw_lines, start=1)
-            if not _is_copied_source_paragraph(line)
-        ]
+        for idx, line in enumerate(raw_lines, start=1):
+            if _is_copied_source_paragraph(line):
+                continue
+            parrafo_original = _match_rewritten_source_paragraph(line)
+            if parrafo_original is not None:
+                parrafos_reescritos.append((line, parrafo_original))
+            else:
+                parsed_items.append(_parse_single_line_as_item(line, idx))
 
     if not planted_errors:
         return ErrorDetectionResult(
@@ -919,8 +1125,12 @@ def evaluate_error_detection(
             aviso_formato=aviso_formato,
         )
 
+    source_norm = _find_source_text(planted_errors)
+
     # Asignación uno a uno: cada ítem acredita a lo sumo un error plantado y viceversa
     accredited_by: dict[int, ParsedErrorCorrection] = {}
+    corregido_por_error: dict[int, bool | None] = {}
+    evidencia_por_error: dict[int, str] = {}
     items_sin_correspondencia: list[ParsedErrorCorrection] = []
 
     for item in parsed_items:
@@ -935,12 +1145,18 @@ def evaluate_error_detection(
             else normalize_error_text(item.linea_original)
         )
 
+        pendientes = [p_err for p_err in planted_errors if p_err.orden not in accredited_by]
         candidatos: list[PlantedError] = [
             p_err
-            for p_err in planted_errors
-            if p_err.orden not in accredited_by
-            and any(normalize_error_text(ancla) in target_norm for ancla in p_err.anclas)
+            for p_err in pendientes
+            if any(normalize_error_text(ancla) in target_norm for ancla in p_err.anclas)
         ]
+        if not candidatos and item.tiene_flecha:
+            candidatos = [
+                p_err
+                for p_err in pendientes
+                if _is_short_quote_of(target_norm, p_err, source_norm, planted_errors)
+            ]
 
         if not candidatos:
             items_sin_correspondencia.append(item)
@@ -960,6 +1176,27 @@ def evaluate_error_detection(
                 elegido = min(candidatos, key=lambda e: e.orden)
 
         accredited_by[elegido.orden] = item
+        evidencia_por_error[elegido.orden] = item.linea_original
+        # Sin flecha no hay corrección separable del fragmento señalado: queda sin verificar
+        corregido_por_error[elegido.orden] = (
+            _is_valid_correction(elegido, target_norm, corr_norm) if item.tiene_flecha else None
+        )
+
+    # Texto completo corregido: un error cuenta si su ancla desapareció del párrafo reescrito
+    for linea, parrafo_original in parrafos_reescritos:
+        linea_norm = normalize_error_text(linea)
+        for p_err in planted_errors:
+            if p_err.orden in evidencia_por_error:
+                continue
+            anclas = [normalize_error_text(a) for a in p_err.anclas]
+            if not any(a in parrafo_original for a in anclas) or any(a in linea_norm for a in anclas):
+                continue
+            evidencia_por_error[p_err.orden] = f"(Texto reescrito) {linea}"
+            corregido_por_error[p_err.orden] = (
+                any(normalize_error_text(c) in linea_norm for c in p_err.correcciones)
+                if p_err.correcciones
+                else None
+            )
 
     detalles: list[PlantedErrorMatchDetail] = []
     claros_total = sum(1 for e in planted_errors if e.categoria.lower() == "claro")
@@ -968,8 +1205,7 @@ def evaluate_error_detection(
     sutiles_det = 0
 
     for p_err in planted_errors:
-        matched_item = accredited_by.get(p_err.orden)
-        is_detected = matched_item is not None
+        is_detected = p_err.orden in evidencia_por_error
         if is_detected:
             if p_err.categoria.lower() == "claro":
                 claros_det += 1
@@ -980,14 +1216,19 @@ def evaluate_error_detection(
             PlantedErrorMatchDetail(
                 error_plantado=p_err,
                 detectado=is_detected,
-                evidencia_modelo=matched_item.linea_original if matched_item else "(No detectado)",
+                evidencia_modelo=evidencia_por_error.get(p_err.orden, "(No detectado)"),
+                corregido=corregido_por_error.get(p_err.orden),
             )
         )
 
     total_plantados = len(planted_errors)
     detectados_total = claros_det + sutiles_det
     cobertura = (detectados_total / total_plantados) * 100.0 if total_plantados > 0 else 0.0
+    corregidos_total = sum(1 for d in detalles if d.corregido is True)
+    sin_verificar_total = sum(1 for d in detalles if d.detectado and d.corregido is None)
+    correccion = (corregidos_total / total_plantados) * 100.0 if total_plantados > 0 else 0.0
 
+    # La precisión se calcula solo sobre ítems de lista: en un texto reescrito no hay ítems que contar
     total_listados = len(parsed_items)
     con_correspondencia = total_listados - len(items_sin_correspondencia)
     precision_aprox = (
@@ -1008,6 +1249,10 @@ def evaluate_error_detection(
         sutiles_detectados=sutiles_det,
         detalles_plantados=detalles,
         aviso_formato=aviso_formato,
+        corregidos_total=corregidos_total,
+        correccion_porcentaje=correccion,
+        sin_verificar_total=sin_verificar_total,
+        texto_reescrito=bool(parrafos_reescritos),
     )
 
 
@@ -1411,13 +1656,21 @@ def format_detailed_audit_log(
             if er.tiene_ground_truth:
                 lines.append(
                     f"[PRUEBA 3 - DETECCIÓN DE ERRORES]: {er.detectados_total}/{er.total_plantados} "
-                    f"(Cobertura: {er.cobertura_porcentaje:.1f}% | Precisión aprox.: {er.precision_aprox_porcentaje:.1f}%) | "
+                    f"(Cobertura: {er.cobertura_porcentaje:.1f}% | Bien corregidos: {er.corregidos_total}/{er.total_plantados} "
+                    f"| Precisión aprox.: {er.precision_aprox_porcentaje:.1f}%) | "
                     f"Claros: {er.claros_detectados}/{er.claros_total} | "
                     f"Sutiles: {er.sutiles_detectados}/{er.sutiles_total} | "
                     f"Ítems sin correspondencia: {len(er.items_sin_correspondencia)}"
                 )
                 for det_e in er.detalles_plantados:
-                    est = "DETECTADO" if det_e.detectado else "OMITIDO"
+                    if not det_e.detectado:
+                        est = "OMITIDO"
+                    elif det_e.corregido is True:
+                        est = "DETECTADO Y BIEN CORREGIDO"
+                    elif det_e.corregido is False:
+                        est = "DETECTADO, MAL CORREGIDO"
+                    else:
+                        est = "DETECTADO (CORRECCIÓN SIN VERIFICAR)"
                     lines.append(
                         f"  - #{det_e.error_plantado.orden} [{det_e.error_plantado.categoria}] "
                         f"«{det_e.error_plantado.fragmento_erroneo}» -> [{est}] | Evidencia: {det_e.evidencia_modelo}"

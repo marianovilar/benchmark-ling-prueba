@@ -15,7 +15,7 @@ Aplicación interactiva en **Python + Streamlit** diseñada con propósitos peda
    - **Densidad normalizada cada 500 palabras:**
      $$\text{Densidad} = \left(\frac{\text{Ocurrencias}}{\text{Palabras totales}}\right) \times 500$$
 3. **🔎 Prueba 3 — Detección y corrección de errores en textos largos (~1000 palabras):**
-   Evaluación uno a uno contra clave oficial (*ground truth*) sobre un banco de 3 textos extensos con errores **claros** (ortografía, homófonos, *haber* impersonal pluralizado) y **sutiles** (coma entre sujeto y verbo, dequeísmo, queísmo, quesuismo, gerundio de posterioridad o especificativo, paronimia), midiendo cobertura (*recall*), precisión aproximada e ítems sin correspondencia.
+   Evaluación uno a uno contra clave oficial (*ground truth*) sobre un banco de 3 textos extensos con errores **claros** (ortografía, homófonos, *haber* impersonal pluralizado) y **sutiles** (coma entre sujeto y verbo, dequeísmo, queísmo, quesuismo, gerundio de posterioridad o especificativo, paronimia), midiendo cobertura (*recall*), errores **bien corregidos** (la corrección propuesta debe eliminar el error y coincidir con una forma aceptada), precisión aproximada e ítems sin correspondencia. Acepta la lista en el formato pedido, tablas Markdown, bloques `Original: … / Corrección: …` o el texto completo corregido (comparado párrafo por párrafo con el original).
 4. **🧉 Prueba 4 — Reconocimiento de variedades del español (creada por estudiantes):**
    Evaluación dialectal, léxica, fraseológica y prosódica (0 a 4 puntos) sobre variedades del español de Argentina (variante rioplatense/platense y tonada cordobesa).
 5. **🛠️ Prueba 5 — Constructor libre de test en vivo para crear en clase:**

@@ -51,6 +51,7 @@ from auditor import (
     VARIEDADES_DEMO_MODELO_B,
     CustomQuestionSpec,
     ModelAuditResult,
+    PlantedErrorMatchDetail,
     build_custom_test_prompt,
     compare_models_in_memory,
     format_detailed_audit_log,
@@ -509,43 +510,62 @@ def render_error_detection_comparison(res_a: ModelAuditResult, res_b: ModelAudit
             "Se evaluó cada línea no vacía como un ítem individual."
         )
 
+    for res_x, er_x in ((res_a, er_a), (res_b, er_b)):
+        if er_x.texto_reescrito:
+            st.info(
+                f"📝 **{res_x.modelo}**: la respuesta es el texto corregido completo. Se comparó cada párrafo con el "
+                "original: un error cuenta como detectado si desapareció y como bien corregido si aparece la forma "
+                "esperada. La precisión no se calcula porque no hay una lista de ítems."
+            )
+
     if er_a.tiene_ground_truth and er_b.tiene_ground_truth:
         m_col1, m_col2 = st.columns(2)
         with m_col1:
             st.markdown(f"**{res_a.modelo}**")
-            k1, k2, k3, k4 = st.columns(4)
+            k1, k2, k3, k4, k5 = st.columns(5)
             k1.metric(
                 "Cobertura (recall)",
                 f"{er_a.detectados_total}/{er_a.total_plantados}",
                 f"{er_a.cobertura_porcentaje:.1f}%",
             )
             k2.metric(
+                "Bien corregidos",
+                f"{er_a.corregidos_total}/{er_a.total_plantados}",
+                f"{er_a.correccion_porcentaje:.1f}%",
+            )
+            k3.metric(
                 "Precisión aproximada",
-                f"{er_a.precision_aprox_porcentaje:.1f}%",
+                "—" if er_a.texto_reescrito and not er_a.items_extraidos else f"{er_a.precision_aprox_porcentaje:.1f}%",
                 f"{len(er_a.items_sin_correspondencia)} sin corresp.",
                 delta_color="off",
             )
-            k3.metric("Errores claros", f"{er_a.claros_detectados}/{er_a.claros_total}")
-            k4.metric("Errores sutiles", f"{er_a.sutiles_detectados}/{er_a.sutiles_total}")
+            k4.metric("Errores claros", f"{er_a.claros_detectados}/{er_a.claros_total}")
+            k5.metric("Errores sutiles", f"{er_a.sutiles_detectados}/{er_a.sutiles_total}")
         with m_col2:
             st.markdown(f"**{res_b.modelo}**")
-            k1, k2, k3, k4 = st.columns(4)
+            k1, k2, k3, k4, k5 = st.columns(5)
             k1.metric(
                 "Cobertura (recall)",
                 f"{er_b.detectados_total}/{er_b.total_plantados}",
                 f"{er_b.cobertura_porcentaje:.1f}%",
             )
             k2.metric(
+                "Bien corregidos",
+                f"{er_b.corregidos_total}/{er_b.total_plantados}",
+                f"{er_b.correccion_porcentaje:.1f}%",
+            )
+            k3.metric(
                 "Precisión aproximada",
-                f"{er_b.precision_aprox_porcentaje:.1f}%",
+                "—" if er_b.texto_reescrito and not er_b.items_extraidos else f"{er_b.precision_aprox_porcentaje:.1f}%",
                 f"{len(er_b.items_sin_correspondencia)} sin corresp.",
                 delta_color="off",
             )
-            k3.metric("Errores claros", f"{er_b.claros_detectados}/{er_b.claros_total}")
-            k4.metric("Errores sutiles", f"{er_b.sutiles_detectados}/{er_b.sutiles_total}")
+            k4.metric("Errores claros", f"{er_b.claros_detectados}/{er_b.claros_total}")
+            k5.metric("Errores sutiles", f"{er_b.sutiles_detectados}/{er_b.sutiles_total}")
 
         st.caption(
-            "Nota sobre **Precisión aproximada** (`ítems con correspondencia / ítems listados`): "
+            "**Bien corregidos**: errores detectados cuya corrección elimina el error y coincide con alguna de las formas "
+            "aceptadas en la clave. Nota sobre **Precisión aproximada** (`ítems con correspondencia / ítems listados`): "
             "algunos ítems sin correspondencia en la clave pueden ser errores o sugerencias de estilo reales no plantados."
         )
 
@@ -560,9 +580,9 @@ def render_error_detection_comparison(res_a: ModelAuditResult, res_b: ModelAudit
                     "Fenómeno": pe.fenomeno,
                     "Error en el texto": pe.fragmento_erroneo,
                     "Corrección esperada": pe.correccion_esperada,
-                    f"{res_a.modelo}": "✅ Detectado" if det_a.detectado else "❌ Omitido",
+                    f"{res_a.modelo}": format_error_status(det_a),
                     f"Evidencia ({res_a.modelo})": det_a.evidencia_modelo,
-                    f"{res_b.modelo}": "✅ Detectado" if det_b.detectado else "❌ Omitido",
+                    f"{res_b.modelo}": format_error_status(det_b),
                     f"Evidencia ({res_b.modelo})": det_b.evidencia_modelo,
                 }
             )
@@ -645,6 +665,17 @@ def render_error_detection_comparison(res_a: ModelAuditResult, res_b: ModelAudit
                 st.dataframe(df_items_b, use_container_width=True, hide_index=True)
             else:
                 st.info("No se detectaron ítems en formato de lista para el modelo 2.")
+
+
+def format_error_status(det: PlantedErrorMatchDetail) -> str:
+    """Estado de un error plantado: omitido, detectado y bien/mal corregido, o detectado sin verificar."""
+    if not det.detectado:
+        return "❌ Omitido"
+    if det.corregido is True:
+        return "✅ Detectado y bien corregido"
+    if det.corregido is False:
+        return "⚠️ Detectado, mal corregido"
+    return "🔎 Detectado (corrección sin verificar)"
 
 
 def render_model_evidence_card(res: ModelAuditResult, show_meta_metric: bool = True) -> None:

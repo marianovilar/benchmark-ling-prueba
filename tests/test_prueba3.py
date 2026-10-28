@@ -7,6 +7,8 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from auditor import evaluate_error_detection
@@ -150,3 +152,106 @@ def test_normalizacion_punto_y_espacio_antes_de_coma() -> None:
     res1 = evaluate_error_detection(resp_t1, ERRORES_TEXTO_1)
     det1 = {d.error_plantado.orden: d for d in res1.detalles_plantados}
     assert det1[3].detectado is True
+
+
+def test_correccion_equivocada_detecta_pero_no_corrige() -> None:
+    """`"Atravez de una red" -> "Atravéz de una red"`: detectado, mal corregido."""
+    res = evaluate_error_detection('1. "Atravez de una red" -> "Atravéz de una red" | Tilde', ERRORES_TEXTO_1)
+    det = {d.error_plantado.orden: d for d in res.detalles_plantados}
+    assert det[1].detectado is True
+    assert det[1].corregido is False
+    assert res.corregidos_total == 0
+
+
+@pytest.mark.parametrize(
+    "correccion",
+    ["habían muchos operarios", "hubieron muchos operarios", ""],
+)
+def test_correccion_que_conserva_o_empeora_el_error_no_cuenta(correccion: str) -> None:
+    res = evaluate_error_detection(f'1. "habían muchos operarios" -> "{correccion}" | Haber', ERRORES_TEXTO_1)
+    det = {d.error_plantado.orden: d for d in res.detalles_plantados}
+    assert det[2].detectado is True
+    assert det[2].corregido is False
+
+
+def test_demo_a_todos_bien_corregidos() -> None:
+    res = evaluate_error_detection(DEMO_RESPUESTA_ERRORES_MODELO_A, ERRORES_TEXTO_1)
+    assert res.corregidos_total == 11
+    assert res.correccion_porcentaje == 100.0
+
+
+def test_correcciones_esperadas_de_la_clave_son_validas() -> None:
+    """La corrección esperada de cada uno de los 34 errores debe contar como bien corregida."""
+    for texto in BANCO_TEXTOS_ERRORES.values():
+        respuesta = "\n".join(
+            f'{i}. "{e.fragmento_erroneo}" -> "{e.correccion_esperada}" | x' for i, e in enumerate(texto.errores, 1)
+        )
+        res = evaluate_error_detection(respuesta, texto.errores)
+        assert res.corregidos_total == len(texto.errores), texto.id
+
+
+@pytest.mark.parametrize(
+    ("respuesta", "orden"),
+    [
+        ('1. "habían" -> "había" | Haber impersonal', 2),
+        ('1. "infringir" -> "infligir" | Paronimia', 11),
+        ('1. "echo" -> "hecho" | Homófonos', 4),
+    ],
+)
+def test_cita_corta_no_ambigua_acredita_y_corrige(respuesta: str, orden: int) -> None:
+    res = evaluate_error_detection(respuesta, ERRORES_TEXTO_1)
+    det = {d.error_plantado.orden: d for d in res.detalles_plantados}
+    assert res.detectados_total == 1
+    assert det[orden].detectado is True
+    assert det[orden].corregido is True
+
+
+def test_cita_corta_sin_la_parte_erronea_no_acredita() -> None:
+    """«En cada taller» está en el fragmento del error 2, pero no en sus anclas: no acredita."""
+    res = evaluate_error_detection('1. "En cada taller" -> "En cada taller" | ?', ERRORES_TEXTO_1)
+    assert res.detectados_total == 0
+
+
+def test_formato_tabla_markdown() -> None:
+    respuesta = (
+        "| # | Error | Corrección | Explicación |\n"
+        "|---|---|---|---|\n"
+        "| 1 | habían muchos operarios | había muchos operarios | Haber impersonal |\n"
+        "| 2 | Atravez | A través | Ortografía |"
+    )
+    res = evaluate_error_detection(respuesta, ERRORES_TEXTO_1)
+    assert len(res.items_extraidos) == 2
+    assert res.detectados_total == 2
+    assert res.corregidos_total == 2
+    assert res.precision_aprox_porcentaje == 100.0
+
+
+def test_formato_en_varias_lineas_con_rotulos() -> None:
+    respuesta = (
+        "**Error 1**\n"
+        'Original: "Atravez de una red"\n'
+        'Corrección: "A través de una red"\n'
+        "Explicación: ortografía\n"
+        "**Error 2**\n"
+        'Original: "habían muchos"\n'
+        'Corrección: "había muchos"'
+    )
+    res = evaluate_error_detection(respuesta, ERRORES_TEXTO_1)
+    assert len(res.items_extraidos) == 2
+    assert res.detectados_total == 2
+    assert res.corregidos_total == 2
+
+
+def test_texto_corregido_completo_no_acredita_errores_que_siguen_ahi() -> None:
+    """
+    Si el modelo devuelve el texto entero con solo los 6 primeros errores corregidos, se acreditan
+    esos 6 y ninguno de los que siguen en el texto (antes, el error 3 se acreditaba igual).
+    """
+    texto = TEXTO_1_CONTENIDO
+    for e in ERRORES_TEXTO_1[:6]:
+        texto = texto.replace(e.fragmento_erroneo, e.correccion_esperada)
+    res = evaluate_error_detection(texto, ERRORES_TEXTO_1)
+    det = {d.error_plantado.orden: d for d in res.detalles_plantados}
+    assert res.texto_reescrito is True
+    assert [o for o, d in det.items() if d.detectado] == [1, 2, 3, 4, 5, 6]
+    assert res.corregidos_total == 6
