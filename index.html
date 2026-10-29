@@ -17,18 +17,22 @@
     <script type="module">
       import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.10.0/build/stlite.js";
 
+      // GitHub Pages deja los archivos 10 minutos en la caché del navegador: el parámetro ?v= fuerza a
+      // descargar el código Python actual en cada visita (el léxico, que casi no cambia, sí se cachea)
+      const version = Date.now();
       const archivo = (ruta) => ({ url: new URL(ruta, window.location.href).href });
+      const codigo = (ruta) => ({ url: `${new URL(ruta, window.location.href).href}?v=${version}` });
 
       mount(
         {
           requirements: ["pandas"],
           entrypoint: "app.py",
           files: {
-            "app.py": archivo("app.py"),
-            "auditor.py": archivo("auditor.py"),
-            "textos_errores.py": archivo("textos_errores.py"),
-            "nlp_ligero.py": archivo("nlp_ligero.py"),
-            "correccion_texto.py": archivo("correccion_texto.py"),
+            "app.py": codigo("app.py"),
+            "auditor.py": codigo("auditor.py"),
+            "textos_errores.py": codigo("textos_errores.py"),
+            "nlp_ligero.py": codigo("nlp_ligero.py"),
+            "correccion_texto.py": codigo("correccion_texto.py"),
             "datos/lexico_verbal_es.json.gz": archivo("datos/lexico_verbal_es.json.gz"),
           },
         },
