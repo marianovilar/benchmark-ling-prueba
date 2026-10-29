@@ -1116,50 +1116,44 @@ def render_evaluator_tab() -> None:
     # SELECTOR DE PRUEBAS ACTIVAS Y BOTONES DE DEMOSTRACIÓN
     # ========================================================================
     st.markdown("#### ⚙️ Selecciona qué pruebas deseas ejecutar:")
-    ctrl1, ctrl2, ctrl3, ctrl3b, ctrl4, ctrl5, ctrl6, ctrl7 = st.columns(
-        [1.9, 1.7, 1.9, 2.0, 2.0, 1.9, 0.9, 0.9]
-    )
-    with ctrl1:
+    col_pruebas, col_botones = st.columns([4, 1])
+    with col_pruebas:
         run_meta = st.toggle(
-            "🧪 Prueba 1: test metalingüístico",
+            "🧪 **Prueba 1** · Test metalingüístico (opción múltiple, gramática normativa o formal)",
             key="run_meta",
         )
-    with ctrl2:
         run_style = st.toggle(
-            "✍️ Prueba 2: estilometría",
+            "✍️ **Prueba 2** · Estilometría (reframing «No es X, es Y» y dos puntos oracionales)",
             key="run_style",
         )
-    with ctrl3:
         run_errors = st.toggle(
-            "🔎 Prueba 3: errores (~1000w)",
+            "🔎 **Prueba 3** · Detección de errores en textos largos (~1000 palabras, lista de errores)",
             key="run_errors",
         )
-    with ctrl3b:
         run_correccion = st.toggle(
-            "🧾 Prueba 3B: corrección (texto breve)",
+            "🧾 **Prueba 3B** · Corrección de un texto breve (texto corregido completo, F0.5 y trampas)",
             key="run_correccion",
         )
-    with ctrl4:
         run_variedades = st.toggle(
-            "🧉 Prueba 4: variedades (AR)",
+            "🧉 **Prueba 4** · Variedades del español de Argentina (creada por estudiantes)",
             key="run_variedades",
         )
-    with ctrl5:
         run_custom = st.toggle(
-            "🛠️ Prueba 5: crear en clase",
+            "🛠️ **Prueba 5** · Test creado en clase",
             key="run_custom",
         )
-    with ctrl6:
+    with col_botones:
         st.button(
             "✨ Ejemplo",
             on_click=load_demo_texts,
             use_container_width=True,
+            help="Carga respuestas de demostración en todas las pruebas.",
         )
-    with ctrl7:
         st.button(
             "🧹 Limpiar",
             on_click=clear_texts,
             use_container_width=True,
+            help="Borra los nombres y todas las respuestas pegadas.",
         )
 
     if not any((run_meta, run_style, run_errors, run_correccion, run_variedades, run_custom)):
