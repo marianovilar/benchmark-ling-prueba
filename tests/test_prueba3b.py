@@ -115,3 +115,47 @@ def test_demos(prueba) -> None:
         "corregido", "omitido", "mal_corregido", "omitido", "omitido", "corregido", "omitido", "omitido"
     ]
     assert "MAL CORREGIDO" in formatear_informe_correccion(prueba, "B", res_b)
+
+
+def test_texto_2_referencia_y_original() -> None:
+    from correccion_texto import TEXTO_BREVE_2
+
+    prueba2 = construir_prueba(TEXTO_BREVE_2)
+    assert len(prueba2.errores) == 18
+    assert len(prueba2.trampas) == 10
+    assert evaluar_correccion(prueba2, prueba2.texto_referencia).f05 == 100.0
+    assert evaluar_correccion(prueba2, prueba2.texto_original).f05 == 0.0
+
+
+def test_texto_2_alternativas_y_trampas() -> None:
+    """«Recuerdo que» y «todavía» son correcciones válidas; «aún así» y «provisional» caen en trampas."""
+    from correccion_texto import TEXTO_BREVE_2, version_parcial
+
+    prueba2 = construir_prueba(TEXTO_BREVE_2)
+    texto = version_parcial(
+        TEXTO_BREVE_2,
+        set(range(1, 19)),
+        (
+            ("Me acuerdo de que", "Recuerdo que"),
+            ("y aún no", "y todavía no"),
+            ("aun así", "aún así"),
+            ("digital provisoria", "digital provisional"),
+        ),
+    )
+    res = evaluar_correccion(prueba2, texto)
+    assert all(r.estado == "corregido" for r in res.errores)
+    trampas = {t.zona.texto: t.respetada for t in res.trampas}
+    assert trampas["aun así"] is False
+    assert trampas["provisoria"] is False
+    assert len(res.sobrecorrecciones) == 2
+
+
+def test_demos_de_todos_los_textos_son_evaluables() -> None:
+    from correccion_texto import DEMOS_CORRECCION
+
+    for texto_id, demos in DEMOS_CORRECCION.items():
+        prueba_x = construir_prueba(BANCO_TEXTOS_BREVES[texto_id])
+        for demo in demos:
+            res = evaluar_correccion(prueba_x, demo)
+            assert res.evaluado and not res.aviso_reescritura
+            assert 0 < res.f05 < 100
