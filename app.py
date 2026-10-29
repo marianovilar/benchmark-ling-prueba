@@ -14,6 +14,7 @@ Ejecución:
 
 from __future__ import annotations
 
+import difflib
 import html
 import importlib
 import re
@@ -26,11 +27,13 @@ import streamlit as st
 import textos_errores
 import nlp_ligero
 import auditor
+import correccion_texto
 
 # Recargar módulos para evitar que Streamlit Cloud conserve versiones en caché tras un git push
 importlib.reload(textos_errores)
 importlib.reload(nlp_ligero)
 importlib.reload(auditor)
+importlib.reload(correccion_texto)
 
 if TYPE_CHECKING:
     from spacy.language import Language
@@ -65,6 +68,18 @@ from textos_errores import (
     DEMO_RESPUESTA_ERRORES_MODELO_B,
     PlantedError,
     build_error_detection_prompt,
+)
+from correccion_texto import (
+    BANCO_TEXTOS_BREVES,
+    DEMO_CORRECCION_MODELO_A,
+    DEMO_CORRECCION_MODELO_B,
+    PruebaCorreccion,
+    ResultadoCorreccion,
+    construir_prompt_correccion,
+    construir_prueba,
+    evaluar_correccion,
+    formatear_informe_correccion,
+    tokenizar,
 )
 
 # ============================================================================
@@ -230,6 +245,11 @@ def init_session_state() -> None:
         st.session_state["run_variedades"] = False
     if "run_custom" not in st.session_state:
         st.session_state["run_custom"] = False
+    if "run_correccion" not in st.session_state:
+        st.session_state["run_correccion"] = False
+    for clave in ("correccion_input_a", "correccion_input_b"):
+        if clave not in st.session_state:
+            st.session_state[clave] = ""
     if "p4_num_q" not in st.session_state:
         st.session_state["p4_num_q"] = 1
     if "p4_q1_fen" not in st.session_state:
@@ -267,6 +287,8 @@ def load_demo_texts() -> None:
     st.session_state["variedades_input_b"] = VARIEDADES_DEMO_MODELO_B
     st.session_state["custom_input_a"] = '{"q1": "A"}'
     st.session_state["custom_input_b"] = '{"q1": "D"}'
+    st.session_state["correccion_input_a"] = DEMO_CORRECCION_MODELO_A
+    st.session_state["correccion_input_b"] = DEMO_CORRECCION_MODELO_B
 
 
 def clear_texts() -> None:
@@ -282,6 +304,8 @@ def clear_texts() -> None:
     st.session_state["variedades_input_b"] = ""
     st.session_state["custom_input_a"] = ""
     st.session_state["custom_input_b"] = ""
+    st.session_state["correccion_input_a"] = ""
+    st.session_state["correccion_input_b"] = ""
 
 
 # ============================================================================
@@ -933,6 +957,158 @@ def render_custom_test_comparison(res_a: ModelAuditResult, res_b: ModelAuditResu
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def render_correccion_selector() -> PruebaCorreccion:
+    """Selector del texto breve de la Prueba 3B, prompt para copiar y clave para el docente."""
+    st.divider()
+    st.markdown("#### 🧾 Configuración de la prueba 3B: corrección de un texto breve (evaluación por ediciones)")
+    opciones = {t.titulo: t for t in BANCO_TEXTOS_BREVES.values()}
+    titulo = st.selectbox("Texto breve:", list(opciones), key="p3b_texto")
+    prueba = construir_prueba(opciones[titulo])
+    st.caption(
+        "El modelo devuelve el **texto completo corregido**. Python lo compara palabra por palabra con el original: "
+        "cada error plantado queda bien corregido, mal corregido u omitido, y cualquier otro cambio cuenta como "
+        "**sobrecorrección**. El texto incluye **trampas** (construcciones correctas que suelen corregirse de más). "
+        "La métrica principal es **F0.5**, que pondera la precisión el doble que la cobertura, como en los "
+        "benchmarks de corrección gramatical (CoNLL-2014, BEA-2019)."
+    )
+    with st.expander("📋 Prompt 3B (Prueba 3B — corrección del texto breve): copiar prompt", expanded=True):
+        st.caption("Haz clic en el icono de copiar (esquina superior derecha del recuadro) y pégalo en ambos modelos:")
+        st.code(construir_prompt_correccion(prueba), language=None, wrap_lines=True)
+    with st.expander("🔑 Clave para el docente: errores plantados, trampas y texto de referencia", expanded=False):
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "#": z.orden,
+                        "Dificultad": "🟢 Claro" if z.categoria == "Claro" else "🟣 Sutil",
+                        "Fenómeno": z.fenomeno,
+                        "Original": z.erroneo.strip() or "(nada)",
+                        "Correcciones aceptadas": " / ".join(c.strip() or "(suprimir)" for c in z.correcciones),
+                    }
+                    for z in prueba.errores
+                ]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.markdown("**Trampas (no deben modificarse):**")
+        for t in prueba.trampas:
+            st.markdown(f"- «{t.texto}»: {t.fenomeno}")
+        st.markdown("**Texto corregido de referencia:**")
+        st.code(prueba.texto_referencia, language=None, wrap_lines=True)
+    st.divider()
+    return prueba
+
+
+def render_diff_html(prueba: PruebaCorreccion, texto_modelo: str) -> str:
+    """Original vs. modelo palabra por palabra: en rojo tachado lo que quitó, en verde lo que agregó."""
+    original = list(prueba.tokens_original)
+    modelo = tokenizar(texto_modelo)
+    partes: list[str] = []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, original, modelo, autojunk=False).get_opcodes():
+        if tag == "equal":
+            partes.append(html.escape(" ".join(original[i1:i2])))
+            continue
+        if i2 > i1:
+            partes.append(
+                '<span style="background-color:#ffcdd2;color:#b71c1c;text-decoration:line-through;'
+                f'padding:0 3px;border-radius:3px;">{html.escape(" ".join(original[i1:i2]))}</span>'
+            )
+        if j2 > j1:
+            partes.append(
+                '<span style="background-color:#c8e6c9;color:#1b5e20;font-weight:600;'
+                f'padding:0 3px;border-radius:3px;">{html.escape(" ".join(modelo[j1:j2]))}</span>'
+            )
+    texto = " ".join(partes)
+    texto = re.sub(r"\s+([,.;:!?)])", r"\1", texto)
+    return f'<div style="line-height:1.9;font-size:0.95rem;">{texto}</div>'
+
+
+def render_correccion_comparison(
+    prueba: PruebaCorreccion,
+    nombres: tuple[str, str],
+    resultados: tuple[ResultadoCorreccion, ResultadoCorreccion],
+) -> None:
+    """Resultados de la Prueba 3B: métricas F0.5, estado de cada error, trampas y sobrecorrecciones."""
+    st.subheader("🧾 Desglose de la prueba 3B: corrección del texto breve")
+    etiquetas = {"corregido": "✅ Bien corregido", "mal_corregido": "⚠️ Mal corregido", "omitido": "❌ Omitido"}
+
+    columnas = st.columns(2)
+    for col, nombre, res in zip(columnas, nombres, resultados):
+        with col:
+            st.markdown(f"**{nombre}**")
+            if not res.evaluado:
+                st.info("Sin texto corregido para evaluar.")
+                continue
+            if res.aviso_reescritura:
+                st.warning(
+                    f"⚠️ El texto del modelo se parece solo en un {res.similitud_global:.0f}% al original: "
+                    "probablemente lo reformuló, resumió o agregó comentarios. Las métricas pueden no ser representativas."
+                )
+            k1, k2, k3, k4, k5 = st.columns(5)
+            k1.metric("F0.5", f"{res.f05:.1f}%")
+            k2.metric("Precisión", f"{res.precision:.1f}%")
+            k3.metric("Cobertura", f"{res.verdaderos_positivos}/{len(prueba.errores)}", f"{res.cobertura:.1f}%")
+            k4.metric("Sobrecorrecciones", len(res.sobrecorrecciones), delta_color="off")
+            k5.metric("Trampas respetadas", f"{sum(t.respetada for t in res.trampas)}/{len(res.trampas)}")
+
+    st.caption(
+        "**Precisión** = correcciones bien hechas / todos los cambios del modelo (los cambios mal hechos y las "
+        "sobrecorrecciones la bajan). **Cobertura** = errores bien corregidos / errores plantados. "
+        "**F0.5** combina ambas pesando más la precisión. Los cambios de espacios y de tipografía de comillas no cuentan."
+    )
+
+    filas = []
+    for orden, zona in enumerate(prueba.errores):
+        fila = {
+            "#": zona.orden,
+            "Dificultad": "🟢 Claro" if zona.categoria == "Claro" else "🟣 Sutil",
+            "Fenómeno": zona.fenomeno,
+            "Original": zona.erroneo.strip() or "(nada)",
+            "Esperado": zona.correcciones[0].strip() or "(suprimir)",
+        }
+        for nombre, res in zip(nombres, resultados):
+            if res.evaluado:
+                r = res.errores[orden]
+                fila[nombre] = etiquetas[r.estado]
+                fila[f"Versión ({nombre})"] = r.version_modelo or "(suprimido)"
+        filas.append(fila)
+    st.dataframe(pd.DataFrame(filas), use_container_width=True, hide_index=True)
+
+    filas_trampas = []
+    for orden, zona in enumerate(prueba.trampas):
+        fila = {"Trampa": f"«{zona.texto}»", "Fenómeno": zona.fenomeno}
+        for nombre, res in zip(nombres, resultados):
+            if res.evaluado:
+                t = res.trampas[orden]
+                fila[nombre] = "✅ Respetada" if t.respetada else f"❌ Cambió a «{t.version_modelo}»"
+        filas_trampas.append(fila)
+    st.markdown("**🪤 Trampas (construcciones correctas que no debían cambiarse):**")
+    st.dataframe(pd.DataFrame(filas_trampas), use_container_width=True, hide_index=True)
+
+    st.markdown("**✂️ Sobrecorrecciones (cambios en partes del texto que estaban bien):**")
+    columnas = st.columns(2)
+    for col, nombre, res in zip(columnas, nombres, resultados):
+        with col:
+            st.markdown(f"**{nombre}** ({len(res.sobrecorrecciones)})")
+            if res.sobrecorrecciones:
+                st.dataframe(
+                    pd.DataFrame(
+                        [{"Original": e.antes or "(nada)", "Modelo": e.despues or "(suprimido)"} for e in res.sobrecorrecciones]
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            elif res.evaluado:
+                st.success("Ninguna: el modelo no tocó lo que estaba bien.")
+
+    with st.expander("🔍 Ver comparación palabra por palabra (original vs. texto de cada modelo)", expanded=False):
+        for nombre, res in zip(nombres, resultados):
+            if res.evaluado:
+                st.markdown(f"**{nombre}** — en rojo tachado lo que quitó, en verde lo que agregó:")
+                st.markdown(render_diff_html(prueba, res.texto_modelo_limpio), unsafe_allow_html=True)
+
+
 def render_evaluator_tab() -> None:
     render_header_and_prompts()
 
@@ -940,8 +1116,8 @@ def render_evaluator_tab() -> None:
     # SELECTOR DE PRUEBAS ACTIVAS Y BOTONES DE DEMOSTRACIÓN
     # ========================================================================
     st.markdown("#### ⚙️ Selecciona qué pruebas deseas ejecutar:")
-    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5, ctrl6, ctrl7 = st.columns(
-        [1.9, 1.7, 1.9, 2.0, 1.9, 0.9, 0.9]
+    ctrl1, ctrl2, ctrl3, ctrl3b, ctrl4, ctrl5, ctrl6, ctrl7 = st.columns(
+        [1.9, 1.7, 1.9, 2.0, 2.0, 1.9, 0.9, 0.9]
     )
     with ctrl1:
         run_meta = st.toggle(
@@ -957,6 +1133,11 @@ def render_evaluator_tab() -> None:
         run_errors = st.toggle(
             "🔎 Prueba 3: errores (~1000w)",
             key="run_errors",
+        )
+    with ctrl3b:
+        run_correccion = st.toggle(
+            "🧾 Prueba 3B: corrección (texto breve)",
+            key="run_correccion",
         )
     with ctrl4:
         run_variedades = st.toggle(
@@ -981,8 +1162,8 @@ def render_evaluator_tab() -> None:
             use_container_width=True,
         )
 
-    if not run_meta and not run_style and not run_errors and not run_variedades and not run_custom:
-        st.warning("Activa al menos una de las cinco pruebas con los interruptores de arriba para continuar.")
+    if not any((run_meta, run_style, run_errors, run_correccion, run_variedades, run_custom)):
+        st.warning("Activa al menos una de las pruebas con los interruptores de arriba para continuar.")
         return
 
     # ========================================================================
@@ -1030,6 +1211,10 @@ def render_evaluator_tab() -> None:
         st.divider()
         _, planted_errors = render_error_benchmark_selector()
         st.divider()
+
+    prueba_correccion: PruebaCorreccion | None = None
+    if run_correccion:
+        prueba_correccion = render_correccion_selector()
 
     if run_variedades:
         with st.expander(
@@ -1092,6 +1277,16 @@ def render_evaluator_tab() -> None:
             )
         else:
             error_input_a = ""
+
+        if run_correccion:
+            correccion_input_a = st.text_area(
+                "🧾 Texto corregido por el modelo (Prueba 3B) — Modelo 1:",
+                key="correccion_input_a",
+                height=220,
+                placeholder="Pega aquí el texto completo corregido que devolvió el modelo 1...",
+            )
+        else:
+            correccion_input_a = ""
 
         if run_variedades:
             variedades_input_a = st.text_area(
@@ -1157,6 +1352,16 @@ def render_evaluator_tab() -> None:
         else:
             error_input_b = ""
 
+        if run_correccion:
+            correccion_input_b = st.text_area(
+                "🧾 Texto corregido por el modelo (Prueba 3B) — Modelo 2:",
+                key="correccion_input_b",
+                height=220,
+                placeholder="Pega aquí el texto completo corregido que devolvió el modelo 2...",
+            )
+        else:
+            correccion_input_b = ""
+
         if run_variedades:
             variedades_input_b = st.text_area(
                 "🧉 Respuestas de variedades del español (Prueba 4, Q1–Q4) — Modelo 2:",
@@ -1203,6 +1408,8 @@ def render_evaluator_tab() -> None:
             variedades_input_b,
             custom_input_a,
             custom_input_b,
+            correccion_input_a,
+            correccion_input_b,
         )
     )
     if not has_any_input:
@@ -1257,6 +1464,18 @@ def render_evaluator_tab() -> None:
         meta_ground_truth=meta_gt,
     )
 
+    resultados_correccion: tuple[ResultadoCorreccion, ResultadoCorreccion] | None = None
+    if run_correccion and prueba_correccion is not None:
+        resultados_correccion = (
+            evaluar_correccion(prueba_correccion, correccion_input_a),
+            evaluar_correccion(prueba_correccion, correccion_input_b),
+        )
+        df_summary["F0.5 prueba 3B (%)"] = [round(r.f05, 1) for r in resultados_correccion]
+        df_summary["Errores corregidos 3B"] = [
+            f"{r.verdaderos_positivos} / {len(prueba_correccion.errores)}" for r in resultados_correccion
+        ]
+        df_summary["Sobrecorrecciones 3B"] = [len(r.sobrecorrecciones) for r in resultados_correccion]
+
     # 1. Tabla resumen general adaptada a las pruebas activas
     st.divider()
     st.subheader("📊 Tabla comparativa de resultados")
@@ -1300,6 +1519,12 @@ def render_evaluator_tab() -> None:
                 min_value=0,
                 max_value=100,
             ),
+            "F0.5 prueba 3B (%)": st.column_config.ProgressColumn(
+                "F0.5 prueba 3B (%)",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100,
+            ),
             "Densidad reframing / 500w": st.column_config.NumberColumn(format="%.2f"),
             "Densidad dos puntos / 500w": st.column_config.NumberColumn(format="%.2f"),
         },
@@ -1314,6 +1539,15 @@ def render_evaluator_tab() -> None:
     if run_errors:
         st.divider()
         render_error_detection_comparison(results[0], results[1])
+
+    # 3B. Si la Prueba 3B (corrección de texto breve) está activa, mostrar ediciones y sobrecorrecciones
+    if resultados_correccion is not None and prueba_correccion is not None:
+        st.divider()
+        render_correccion_comparison(
+            prueba_correccion,
+            (results[0].modelo, results[1].modelo),
+            resultados_correccion,
+        )
 
     # 4. Si la Prueba 4 (variedades del español) está activa, mostrar desglose pregunta por pregunta
     if run_variedades:
@@ -1369,6 +1603,11 @@ def render_evaluator_tab() -> None:
             run_variedades=run_variedades,
             run_custom=run_custom,
         )
+        if resultados_correccion is not None and prueba_correccion is not None:
+            log_str += "\n" + "\n".join(
+                formatear_informe_correccion(prueba_correccion, res.modelo, res_c)
+                for res, res_c in zip(results, resultados_correccion)
+            )
         st.download_button(
             "📄 Descargar informe detallado (TXT)",
             data=log_str.encode("utf-8"),
