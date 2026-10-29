@@ -53,7 +53,7 @@ class TextoBreveMarcado:
 
 TEXTO_BREVE_1: Final[TextoBreveMarcado] = TextoBreveMarcado(
     id="breve_1",
-    titulo="Texto breve 1: Digitalización de la biblioteca (~170 palabras, 8 errores, 4 trampas)",
+    titulo="Texto 1: Digitalización de la biblioteca (~170 palabras, 8 errores, 4 trampas)",
     marcado=(
         "La biblioteca central de la facultad inició en marzo un ambicioso plan de digitalización. "
         "{Habían=>Había} pocos ejemplares disponibles de las obras más consultadas, y los responsables "
@@ -85,7 +85,81 @@ TEXTO_BREVE_1: Final[TextoBreveMarcado] = TextoBreveMarcado(
     ),
 )
 
-BANCO_TEXTOS_BREVES: Final[dict[str, TextoBreveMarcado]] = {TEXTO_BREVE_1.id: TEXTO_BREVE_1}
+TEXTO_BREVE_2: Final[TextoBreveMarcado] = TextoBreveMarcado(
+    id="breve_2",
+    titulo="Texto 2: Mudanza del archivo municipal (~450 palabras, 18 errores, 10 trampas) — más difícil",
+    marcado=(
+        "El Archivo Histórico Municipal atraviesa desde hace dos años una mudanza que, según sus responsables, "
+        "no tiene precedentes en la ciudad. [[Debe de haber]] unos cuarenta mil legajos repartidos entre el "
+        "edificio viejo y el nuevo depósito, y cada uno requiere un registro detallado antes del traslado. Para "
+        "coordinar la tarea, la dirección redactó un [[guion]] de trabajo que distribuye los fondos por series y "
+        "fija plazos semanales. {Se necesita=>Se necesitan|Hacen falta} más de veinte voluntarios para cumplir ese "
+        "calendario, pero hasta ahora [[solo]] se inscribieron doce.\n\n"
+        "Los primeros meses fueron los más difíciles. {Hubieron=>Hubo} protestas de algunos investigadores, que "
+        "temían perder el acceso a la documentación durante meses, y la directora tuvo que reunirse con ellos "
+        "varias veces. {La=>Le} dijeron, con cierta dureza, que el cronograma no contemplaba las consultas "
+        "urgentes. [[Este]] fue, quizás, el primer aprendizaje del equipo: una mudanza no mueve solo cajas, "
+        "[[sino]] también hábitos y expectativas. {A parte=>Aparte} de eso, la institución no había logrado "
+        "{proveer=>prever|anticipar|calcular|estimar} el costo real de los materiales de embalaje, que se duplicó en pocas semanas.\n\n"
+        "Los técnicos del área de conservación preventiva del archivo y de la biblioteca universitaria "
+        "asociada{,=>} recomendaron revisar cada caja antes de cerrarla. [[Revisando]] las cajas de la serie "
+        "notarial, una archivista encontró un expediente del siglo XVIII que nadie había catalogado. El documento "
+        "fue trasladado de inmediato a una sala climatizada{, siendo digitalizado=>, y fue digitalizado|"
+        "y fue digitalizado|, y se digitalizó|y se digitalizó} meses más tarde por un equipo externo. Hoy "
+        "{se haya=>se halla} en la sala de consulta, a disposición del público. Por suerte, el hallazgo resultó "
+        "{inicuo=>inocuo|inofensivo} para el cronograma: no demoró el traslado ni un solo día.\n\n"
+        "Según el último informe, {van a haber=>va a haber} cambios en el horario de atención mientras dure la "
+        "segunda etapa. {Es posible de que=>Es posible que} la sala de lectura cierre por completo durante el "
+        "verano, aunque la directora está convencida [[de que]] podrá habilitarse una consulta digital "
+        "[[provisoria]]. Muchos usuarios todavía no entienden {el por qué=>el porqué} de estas restricciones, y "
+        "{aun=>aún|todavía} no se publicó un comunicado oficial que las explique. Mientras tanto, en {este aula=>esta "
+        "aula} del primer piso se reúne cada lunes el equipo de coordinación, y en la entrada colocaron una "
+        "{vaya=>valla} para ordenar la fila de quienes retiran copias.\n\n"
+        "La directora recuerda aquella primera etapa con humor. «{Me acuerdo que=>Me acuerdo de que|Recuerdo que} nadie sabía "
+        "por dónde empezar», cuenta. «La experiencia {a sido=>ha sido} agotadora, pero el equipo aprendió a pedir "
+        "ayuda a tiempo». [[Si no]] llegan nuevos fondos, la última etapa se postergará hasta el año próximo; "
+        "[[aun así]], el equipo confía en terminar el traslado antes de que venza el contrato de alquiler. Esta "
+        "{ves=>vez}, asegura la directora, el archivo dejará de ser un depósito de papeles viejos para convertirse "
+        "en un espacio de consulta abierto a toda la comunidad."
+    ),
+    errores=(
+        ErrorPlantadoBreve("Sutil", "Concordancia en pasiva refleja con sujeto plural"),
+        ErrorPlantadoBreve("Claro", "'Haber' impersonal pluralizado"),
+        ErrorPlantadoBreve("Sutil", "Laísmo"),
+        ErrorPlantadoBreve("Claro", "'Aparte' (adverbio) escrito en dos palabras"),
+        ErrorPlantadoBreve("Sutil", "Paronimia 'proveer' / 'prever'"),
+        ErrorPlantadoBreve("Sutil", "Coma entre sujeto (largo) y verbo"),
+        ErrorPlantadoBreve("Sutil", "Gerundio de posterioridad"),
+        ErrorPlantadoBreve("Claro", "Homófonos 'haya' / 'halla'"),
+        ErrorPlantadoBreve("Sutil", "Paronimia 'inicuo' / 'inocuo'"),
+        ErrorPlantadoBreve("Sutil", "'Haber' impersonal pluralizado en perífrasis"),
+        ErrorPlantadoBreve("Sutil", "Dequeísmo"),
+        ErrorPlantadoBreve("Claro", "'Porqué' sustantivo"),
+        ErrorPlantadoBreve("Sutil", "Tilde diacrítica de 'aún' (= todavía)"),
+        ErrorPlantadoBreve("Sutil", "Demostrativo ante femenino con /a/ tónica"),
+        ErrorPlantadoBreve("Claro", "Homófonos 'vaya' / 'valla'"),
+        ErrorPlantadoBreve("Sutil", "Queísmo ('acordarse de que')"),
+        ErrorPlantadoBreve("Claro", "'Ha' (verbo haber) sin hache"),
+        ErrorPlantadoBreve("Claro", "'Vez' con s"),
+    ),
+    trampas=(
+        TrampaBreve("'Deber de' + infinitivo de probabilidad (correcto)"),
+        TrampaBreve("'guion' sin tilde (norma de 2010)"),
+        TrampaBreve("'solo' adverbio sin tilde (norma de 2010)"),
+        TrampaBreve("Demostrativo 'este' sin tilde (norma de 2010)"),
+        TrampaBreve("'sino' adversativo correcto"),
+        TrampaBreve("Gerundio de simultaneidad válido"),
+        TrampaBreve("'estar convencido de que' (el 'de' es obligatorio)"),
+        TrampaBreve("'provisoria' (americanismo válido)"),
+        TrampaBreve("'si no' condicional correcto"),
+        TrampaBreve("'aun así' (= incluso así) sin tilde"),
+    ),
+)
+
+BANCO_TEXTOS_BREVES: Final[dict[str, TextoBreveMarcado]] = {
+    TEXTO_BREVE_1.id: TEXTO_BREVE_1,
+    TEXTO_BREVE_2.id: TEXTO_BREVE_2,
+}
 
 # ============================================================================
 # TOKENIZACIÓN Y PARSEO DEL MARCADO
@@ -414,17 +488,51 @@ def construir_prompt_correccion(prueba: PruebaCorreccion) -> str:
     )
 
 
-# Respuestas de demostración: A corrige todo salvo el gerundio y cae en la trampa de «sólo»;
-# B omite errores sutiles, corrige mal uno y reformula una frase correcta
-_PRUEBA_DEMO: Final[PruebaCorreccion] = construir_prueba(TEXTO_BREVE_1)
-DEMO_CORRECCION_MODELO_A: Final[str] = (
-    _PRUEBA_DEMO.texto_referencia.replace("no solo en papel", "no sólo en papel").replace(
-        "invierno, y concluyó en diciembre", "invierno, concluyendo en diciembre"
-    )
-)
-DEMO_CORRECCION_MODELO_B: Final[str] = (
-    _PRUEBA_DEMO.texto_original.replace("Habían", "Había")
-    .replace("atravez", "através")
-    .replace("debería a ver", "debería haber")
-    .replace("en pocos minutos", "en apenas unos minutos")
-)
+def version_parcial(texto: TextoBreveMarcado, corregir: set[int], reemplazos: tuple[tuple[str, str], ...] = ()) -> str:
+    """
+    Versión del texto con solo algunos errores corregidos (los de `corregir`, por número de orden) y
+    reemplazos adicionales sobre el resultado. Sirve para armar respuestas de demostración y tests.
+    """
+    numero = 0
+
+    def resolver(marca: re.Match[str]) -> str:
+        nonlocal numero
+        if marca.group(3) is not None:
+            return marca.group(3)
+        numero += 1
+        return marca.group(2).split("|")[0] if numero in corregir else marca.group(1)
+
+    resultado = PATRON_MARCA.sub(resolver, texto.marcado)
+    for viejo, nuevo in reemplazos:
+        resultado = resultado.replace(viejo, nuevo, 1)
+    return resultado
+
+
+# Respuestas de demostración por texto: (modelo A, modelo B)
+DEMOS_CORRECCION: Final[dict[str, tuple[str, str]]] = {
+    # A corrige todo salvo el gerundio y cae en la trampa de «sólo»;
+    # B omite errores sutiles, corrige mal uno y reformula una frase correcta
+    TEXTO_BREVE_1.id: (
+        version_parcial(TEXTO_BREVE_1, {1, 2, 3, 4, 5, 6, 8}, (("no solo en papel", "no sólo en papel"),)),
+        version_parcial(
+            TEXTO_BREVE_1,
+            {1, 6},
+            (("atravez", "através"), ("en pocos minutos", "en apenas unos minutos")),
+        ),
+    ),
+    # A se le escapan cuatro errores sutiles y cambia «guion» y «provisoria»;
+    # B corrige solo errores claros y agrega tildes que la norma actual no lleva
+    TEXTO_BREVE_2.id: (
+        version_parcial(
+            TEXTO_BREVE_2,
+            set(range(1, 19)) - {6, 7, 10, 14},
+            (("un guion de", "un guión de"), ("digital provisoria", "digital provisional")),
+        ),
+        version_parcial(
+            TEXTO_BREVE_2,
+            {2, 4, 8, 12, 15, 17, 18},
+            (("ahora solo se", "ahora sólo se"), ("Este fue", "Éste fue"), ("aun así", "aún así")),
+        ),
+    ),
+}
+DEMO_CORRECCION_MODELO_A, DEMO_CORRECCION_MODELO_B = DEMOS_CORRECCION[TEXTO_BREVE_1.id]

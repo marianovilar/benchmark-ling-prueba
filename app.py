@@ -71,8 +71,7 @@ from textos_errores import (
 )
 from correccion_texto import (
     BANCO_TEXTOS_BREVES,
-    DEMO_CORRECCION_MODELO_A,
-    DEMO_CORRECCION_MODELO_B,
+    DEMOS_CORRECCION,
     PruebaCorreccion,
     ResultadoCorreccion,
     construir_prompt_correccion,
@@ -287,8 +286,12 @@ def load_demo_texts() -> None:
     st.session_state["variedades_input_b"] = VARIEDADES_DEMO_MODELO_B
     st.session_state["custom_input_a"] = '{"q1": "A"}'
     st.session_state["custom_input_b"] = '{"q1": "D"}'
-    st.session_state["correccion_input_a"] = DEMO_CORRECCION_MODELO_A
-    st.session_state["correccion_input_b"] = DEMO_CORRECCION_MODELO_B
+    # La demo de la Prueba 3B corresponde al texto breve seleccionado
+    texto_3b = next(
+        (t for t in BANCO_TEXTOS_BREVES.values() if t.titulo == st.session_state.get("p3b_texto")),
+        next(iter(BANCO_TEXTOS_BREVES.values())),
+    )
+    st.session_state["correccion_input_a"], st.session_state["correccion_input_b"] = DEMOS_CORRECCION[texto_3b.id]
 
 
 def clear_texts() -> None:
@@ -962,7 +965,12 @@ def render_correccion_selector() -> PruebaCorreccion:
     st.divider()
     st.markdown("#### 🧾 Configuración de la prueba 3B: corrección de un texto breve (evaluación por ediciones)")
     opciones = {t.titulo: t for t in BANCO_TEXTOS_BREVES.values()}
-    titulo = st.selectbox("Texto breve:", list(opciones), key="p3b_texto")
+    titulo = st.selectbox(
+        "Texto a corregir:",
+        list(opciones),
+        key="p3b_texto",
+        help="Si cambias de texto, vuelve a copiar el prompt y a pegar las respuestas de los modelos.",
+    )
     prueba = construir_prueba(opciones[titulo])
     st.caption(
         "El modelo devuelve el **texto completo corregido**. Python lo compara palabra por palabra con el original: "
