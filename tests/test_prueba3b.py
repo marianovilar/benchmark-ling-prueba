@@ -159,3 +159,42 @@ def test_demos_de_todos_los_textos_son_evaluables() -> None:
             res = evaluar_correccion(prueba_x, demo)
             assert res.evaluado and not res.aviso_reescritura
             assert 0 < res.f05 < 100
+
+
+def test_texto_3_largo_referencia_y_original() -> None:
+    from correccion_texto import TEXTO_BREVE_3
+
+    prueba3 = construir_prueba(TEXTO_BREVE_3)
+    assert len(prueba3.errores) == 45
+    assert sum(z.categoria == "Sutil" for z in prueba3.errores) > 25
+    assert len(prueba3.trampas) == 19
+    assert len(prueba3.texto_original.split()) > 950
+    res = evaluar_correccion(prueba3, prueba3.texto_referencia)
+    assert res.f05 == 100.0 and res.sobrecorrecciones == []
+    assert evaluar_correccion(prueba3, prueba3.texto_original).f05 == 0.0
+
+
+def test_texto_3_alternativas_y_trampas() -> None:
+    """«Mientras más», «hubiese» y «mejor solución» son válidas; «sólo», «guió» y «inadvertida» caen en trampas."""
+    from correccion_texto import TEXTO_BREVE_3, version_parcial
+
+    prueba3 = construir_prueba(TEXTO_BREVE_3)
+    texto = version_parcial(
+        TEXTO_BREVE_3,
+        set(range(1, 46)),
+        (
+            ("cuanto más se", "mientras más se"),
+            ("municipio hubiera", "municipio hubiese"),
+            ("la solución óptima", "la mejor solución"),
+            ("julio, y el convenio", "julio y el convenio"),
+            ("aunque solo quince", "aunque sólo quince"),
+            ("profesional guio", "profesional guió"),
+            ("pasó desapercibida", "pasó inadvertida"),
+        ),
+    )
+    res = evaluar_correccion(prueba3, texto)
+    assert all(r.estado == "corregido" for r in res.errores)
+    trampas = [t.respetada for t in res.trampas]
+    assert trampas.count(False) == 3
+    assert not res.trampas[14].respetada  # el segundo «solo»
+    assert len(res.sobrecorrecciones) == 3

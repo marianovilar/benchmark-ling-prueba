@@ -156,9 +156,161 @@ TEXTO_BREVE_2: Final[TextoBreveMarcado] = TextoBreveMarcado(
     ),
 )
 
+TEXTO_BREVE_3: Final[TextoBreveMarcado] = TextoBreveMarcado(
+    id="breve_3",
+    titulo="Texto 3: Restauración del teatro del barrio (~1000 palabras, 45 errores, 19 trampas) — el más exigente",
+    marcado=(
+        "{Hacen=>Hace} casi tres años que el Teatro Alameda permanece cerrado. El edificio, inaugurado en "
+        "1912, [[debe de]] rondar los cuatro mil metros cuadrados, y durante décadas fue el centro de la vida"
+        " cultural del barrio. En {Marzo=>marzo} de 2023, un temporal {infringió=>infligió|causó|provocó} "
+        "graves daños a la cubierta, y el municipio {tubo=>tuvo} que clausurar la sala de manera preventiva. "
+        "Desde entonces, los vecinos reclaman una restauración integral, y no [[solo]] una reparación de "
+        "emergencia que permita reabrir las puertas por unos meses.\n\n"
+        "La comisión de vecinos y comerciantes de las cuadras que rodean el viejo teatro{,=>} presentó en "
+        "abril un petitorio con más de seis mil firmas. «{Habemos=>Somos} muchos los que crecimos viendo "
+        "funciones en esa sala», explicó su presidenta, que {piensa de que=>piensa que} el edificio forma "
+        "parte de la identidad del barrio. Durante la reunión con el Concejo Deliberante, los integrantes de "
+        "la comisión {le=>les} explicaron a los funcionarios que la demora agravaba el deterioro y que, "
+        "{contra más=>cuanto más|mientras más} se postergara la obra, más cara resultaría. La propuesta, sin "
+        "embargo, pasó [[desapercibida]] en los medios locales durante varias semanas.\n\n"
+        "Los estudios técnicos {rebelaron=>revelaron} un panorama mucho más grave de lo previsto. Las vigas "
+        "del escenario estaban podridas y la instalación eléctrica no cumplía ninguna norma vigente. "
+        "[[Mientras más]] avanzaba el relevamiento, más problemas aparecían. En el subsuelo, los técnicos "
+        "encontraron una caja {conteniendo=>que contenía|con} los planos originales del edificio, que nadie "
+        "había visto desde los años cuarenta. El hallazgo {fué=>fue} celebrado por los historiadores, porque "
+        "permitió reconstruir con precisión las molduras de los palcos y el diseño {exhuberante=>exuberante} "
+        "del telón de boca.\n\n"
+        "La obra quedó en manos de un arquitecto {que su=>cuyo} estudio ya había restaurado otras dos salas "
+        "históricas de la provincia. El mismo profesional [[guio]] a los periodistas por el edificio en una "
+        "recorrida que duró casi dos horas. «No {se=>sé} si alguna vez vi un deterioro semejante», admitió "
+        "frente al escenario. «[[Aun]] los técnicos más experimentados se sorprendieron. {Sobretodo=>Sobre "
+        "todo|Sobre todo,} nos preocupa la cúpula, que podría ceder si no se refuerza antes del invierno». "
+        "[[Aquel]] fue el primer anuncio oficial sobre el riesgo estructural, y la noticia se difundió "
+        "rápidamente gracias a un [[video]] que grabaron los propios vecinos.\n\n"
+        "El financiamiento fue el tema más discutido. El presupuesto original [[preveía]] una inversión de "
+        "cuatro millones, pero la inflación y los imprevistos lo duplicaron en pocos meses. "
+        "{Preveyendo=>Previendo} nuevas subas, el Concejo aprobó una partida adicional en julio{, firmándose "
+        "el convenio=>, y el convenio se firmó|y el convenio se firmó} dos semanas después. {Sin embargo=>Sin"
+        " embargo,} el dinero no alcanzaba para todo. Algunos concejales aseguran que, {si el municipio "
+        "habría=>si el municipio hubiera|si el municipio hubiese} aceptado la oferta de un inversor privado, "
+        "la obra ya estaría terminada; otros sostienen que esa propuesta habría convertido el teatro en un "
+        "salón de eventos.\n\n"
+        "El debate tuvo también un costado judicial. El {ex intendente=>exintendente}, que impulsó el "
+        "proyecto original, fue {absorbido=>absuelto} el año pasado de las acusaciones de sobreprecios que "
+        "pesaban sobre aquella licitación, y hoy apoya la restauración desde la oposición. El [[ex secretario"
+        " general]] del sindicato de actores se sumó al reclamo con una carta abierta. A la actual intendenta"
+        " le {preocupa=>preocupan} los plazos más que el costo, y por eso exigió que, {apartir=>a partir} de "
+        "enero, {habrán=>habrá} inspecciones mensuales con un informe público de avance.\n\n"
+        "Las obras comenzaron finalmente en septiembre. Un grupo de jóvenes del barrio se formó en un taller "
+        "municipal de carpintería, y los docentes destacaron su {actitud=>aptitud} para el trabajo con "
+        "maderas nobles. [[Trabajando]] en turnos rotativos, los aprendices lograron recuperar buena parte de"
+        " las butacas originales. Según el contrato, la empresa constructora {debe de=>debe} entregar la "
+        "primera etapa antes del verano, [[con la condición de que]] contrate mano de obra local. En una "
+        "asamblea reciente, la mayoría de los vecinos [[apoyaron]] esa cláusula, aunque muchos dudan de que "
+        "la empresa la cumpla.\n\n"
+        "El taller despertó, además, vocaciones inesperadas. «Yo no sabía nada de carpintería, pero el "
+        "profesor me enseñó a tener paciencia», cuenta uno de los aprendices, de diecinueve años. "
+        "«{Ojala=>Ojalá} pueda seguir trabajando acá cuando terminen las obras». Su instructor asegura que "
+        "[[ese]] es el mayor logro del proyecto: que los jóvenes sientan el teatro como algo propio y no como"
+        " un edificio ajeno. Según sus registros, {han habido=>ha habido} más de cuarenta inscriptos desde la"
+        " primera convocatoria, aunque [[solo]] quince completaron la formación.\n\n"
+        "La restauración incluirá no solo la sala principal, {si no=>sino} también el foyer y la antigua "
+        "confitería, que volverá a funcionar como café literario. El proyecto se [[adecua]] a la normativa de"
+        " accesibilidad: habrá rampas, un ascensor y {mas=>más} de veinte ubicaciones para personas con "
+        "movilidad reducida. La directora del teatro se {enteró que=>enteró de que} el ascensor no cabía en "
+        "el hueco previsto cuando la obra ya estaba avanzada, y el arquitecto tuvo que rediseñar el acceso "
+        "lateral. Todavía no está claro {por que=>por qué} ese error no se detectó antes, pero la empresa "
+        "[[recién]] lo admitió la semana pasada.\n\n"
+        "La {abertura=>apertura} de la temporada está prevista para abril del año próximo, {a pesar que=>a "
+        "pesar de que} todavía {faltan=>falta} definir algunos detalles de la programación. "
+        "{Tambien=>También} se planea un ciclo de teatro independiente con entradas a precios populares. La "
+        "propuesta final {satisfació=>satisfizo} a casi todos los sectores, y la comisión considera que es la"
+        " {solución más óptima=>solución óptima|mejor solución} para un edificio de estas "
+        "características.\n\n"
+        "Para los vecinos más antiguos, la espera tiene un sabor especial. «Nos {han echo=>han hecho} muchas "
+        "promesas», recuerda una mujer de ochenta años que vive enfrente del teatro desde su infancia. "
+        "«Cuando éramos chicos {ibamos=>íbamos} todos los domingos, y la sala nunca estaba {bacía=>vacía}». "
+        "Cuando un funcionario intentó minimizar los retrasos durante la última asamblea, la mujer no se "
+        "{cayó=>calló}: le recordó {un sin número=>un sinnúmero} de anuncios incumplidos y le pidió una fecha"
+        " concreta. Nadie le respondió en ese momento. Para el barrio, el Alameda no es un edificio "
+        "cualquiera, [[sino]] un lugar de encuentro entre generaciones. [[Si no]] se cumplen los plazos, la "
+        "comisión volverá a movilizarse; mientras tanto, cada sábado organiza visitas guiadas por la vereda "
+        "para que el {publico=>público} pueda seguir de cerca los avances de la obra."
+    ),
+    errores=(
+        ErrorPlantadoBreve("Sutil", "'Hacer' impersonal pluralizado"),
+        ErrorPlantadoBreve("Claro", "Mayúscula en nombre de mes"),
+        ErrorPlantadoBreve("Sutil", "Paronimia 'infringir' / 'infligir'"),
+        ErrorPlantadoBreve("Claro", "Homófonos 'tubo' / 'tuvo'"),
+        ErrorPlantadoBreve("Sutil", "Coma entre sujeto (largo) y verbo"),
+        ErrorPlantadoBreve("Sutil", "'Habemos' por 'somos'"),
+        ErrorPlantadoBreve("Sutil", "Dequeísmo"),
+        ErrorPlantadoBreve("Sutil", "'Le' por 'les' con complemento indirecto plural duplicado"),
+        ErrorPlantadoBreve("Sutil", "'Contra más' (vulgarismo) por 'cuanto más'"),
+        ErrorPlantadoBreve("Claro", "Homófonos 'rebelar' / 'revelar'"),
+        ErrorPlantadoBreve("Sutil", "Gerundio especificativo (complemento de un sustantivo)"),
+        ErrorPlantadoBreve("Claro", "Tilde en el monosílabo 'fue'"),
+        ErrorPlantadoBreve("Claro", "'Exuberante' sin hache"),
+        ErrorPlantadoBreve("Sutil", "Quesuismo ('que su' por 'cuyo')"),
+        ErrorPlantadoBreve("Claro", "Tilde diacrítica de 'sé' (verbo saber)"),
+        ErrorPlantadoBreve("Claro", "'Sobre todo' (locución adverbial) en dos palabras"),
+        ErrorPlantadoBreve("Sutil", "Conjugación de 'prever' ('preveyendo' por 'previendo')"),
+        ErrorPlantadoBreve("Sutil", "Gerundio de posterioridad"),
+        ErrorPlantadoBreve("Sutil", "Coma tras conector discursivo ('sin embargo')"),
+        ErrorPlantadoBreve("Sutil", "Condicional en la prótasis ('si habría' por 'si hubiera')"),
+        ErrorPlantadoBreve("Sutil", "Prefijo 'ex-' unido a base simple (norma de 2010)"),
+        ErrorPlantadoBreve("Sutil", "Paronimia 'absorber' / 'absolver'"),
+        ErrorPlantadoBreve("Sutil", "Concordancia con sujeto pospuesto ('le preocupan los plazos')"),
+        ErrorPlantadoBreve("Claro", "'A partir' en dos palabras"),
+        ErrorPlantadoBreve("Claro", "'Haber' impersonal pluralizado"),
+        ErrorPlantadoBreve("Sutil", "Paronimia 'actitud' / 'aptitud'"),
+        ErrorPlantadoBreve("Sutil", "'Deber de' con valor de obligación"),
+        ErrorPlantadoBreve("Claro", "Tilde de 'ojalá'"),
+        ErrorPlantadoBreve("Sutil", "'Haber' impersonal pluralizado en tiempo compuesto"),
+        ErrorPlantadoBreve("Claro", "'Sino' adversativo escrito 'si no'"),
+        ErrorPlantadoBreve("Claro", "Tilde de 'más' (adverbio de cantidad)"),
+        ErrorPlantadoBreve("Sutil", "Queísmo ('enterarse de que')"),
+        ErrorPlantadoBreve("Claro", "Tilde de 'por qué' en interrogativa indirecta"),
+        ErrorPlantadoBreve("Sutil", "Paronimia 'abertura' / 'apertura'"),
+        ErrorPlantadoBreve("Sutil", "Queísmo ('a pesar de que')"),
+        ErrorPlantadoBreve("Sutil", "Concordancia con sujeto de infinitivo ('falta definir')"),
+        ErrorPlantadoBreve("Claro", "Tilde de 'también'"),
+        ErrorPlantadoBreve("Sutil", "Conjugación de 'satisfacer' ('satisfació' por 'satisfizo')"),
+        ErrorPlantadoBreve("Sutil", "Superlativo redundante ('más óptima')"),
+        ErrorPlantadoBreve("Claro", "Homófonos 'echo' / 'hecho'"),
+        ErrorPlantadoBreve("Claro", "Tilde de 'íbamos'"),
+        ErrorPlantadoBreve("Claro", "Homófonos 'bacía' / 'vacía'"),
+        ErrorPlantadoBreve("Claro", "Homófonos 'cayó' / 'calló'"),
+        ErrorPlantadoBreve("Sutil", "'Sinnúmero' (sustantivo) en una palabra"),
+        ErrorPlantadoBreve("Claro", "Tilde de 'público' (sustantivo)"),
+    ),
+    trampas=(
+        TrampaBreve("'Deber de' + infinitivo de probabilidad (correcto)"),
+        TrampaBreve("'solo' adverbio sin tilde (norma de 2010)"),
+        TrampaBreve("'Pasar desapercibido' (uso válido, equivale a 'inadvertido')"),
+        TrampaBreve("'Mientras más' (variante válida de 'cuanto más')"),
+        TrampaBreve("'guio' sin tilde (monosílabo ortográfico, norma de 2010)"),
+        TrampaBreve("'aun' (= incluso) sin tilde"),
+        TrampaBreve("Demostrativo 'aquel' sin tilde (norma de 2010)"),
+        TrampaBreve("'video' llano (forma americana válida)"),
+        TrampaBreve("Conjugación correcta de 'prever' ('preveía')"),
+        TrampaBreve("'ex' separado ante base pluriverbal ('ex secretario general')"),
+        TrampaBreve("Gerundio modal válido"),
+        TrampaBreve("'con la condición de que' (el 'de' es obligatorio)"),
+        TrampaBreve("Concordancia en plural con 'la mayoría de' + sustantivo plural (válida)"),
+        TrampaBreve("Demostrativo 'ese' sin tilde (norma de 2010)"),
+        TrampaBreve("'solo' adverbio sin tilde (norma de 2010)"),
+        TrampaBreve("'adecua' (acentuación válida, igual que 'adecúa')"),
+        TrampaBreve("'recién' ante verbo conjugado (americanismo válido)"),
+        TrampaBreve("'sino' adversativo correcto"),
+        TrampaBreve("'si no' condicional correcto"),
+    ),
+)
+
 BANCO_TEXTOS_BREVES: Final[dict[str, TextoBreveMarcado]] = {
     TEXTO_BREVE_1.id: TEXTO_BREVE_1,
     TEXTO_BREVE_2.id: TEXTO_BREVE_2,
+    TEXTO_BREVE_3.id: TEXTO_BREVE_3,
 }
 
 # ============================================================================
@@ -532,6 +684,30 @@ DEMOS_CORRECCION: Final[dict[str, tuple[str, str]]] = {
             TEXTO_BREVE_2,
             {2, 4, 8, 12, 15, 17, 18},
             (("ahora solo se", "ahora sólo se"), ("Este fue", "Éste fue"), ("aun así", "aún así")),
+        ),
+    ),
+    # A corrige casi todo, pero se le escapan ocho errores sutiles y cae en cuatro trampas;
+    # B corrige solo los errores claros, corrige mal uno sutil y agrega tildes que la norma actual no lleva
+    TEXTO_BREVE_3.id: (
+        version_parcial(
+            TEXTO_BREVE_3,
+            set(range(1, 46)) - {5, 8, 9, 20, 27, 29, 36, 39},
+            (
+                ("pasó desapercibida", "pasó inadvertida"),
+                ("profesional guio", "profesional guió"),
+                ("un video que", "un vídeo que"),
+                ("Aun los técnicos", "Aún los técnicos"),
+            ),
+        ),
+        version_parcial(
+            TEXTO_BREVE_3,
+            {2, 4, 10, 12, 13, 15, 16, 24, 25, 28, 30, 31, 33, 37, 40, 41, 42, 43, 45},
+            (
+                ("fue absorbido", "fue absolvido"),
+                ("y no solo una", "y no sólo una"),
+                ("Aquel fue", "Aquél fue"),
+                ("Mientras más avanzaba", "Cuanto más avanzaba"),
+            ),
         ),
     ),
 }
